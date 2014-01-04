@@ -1,0 +1,35 @@
+{
+  "name": "redis-queue",
+  "version": "0.1.0",
+  "description": "A queue implementation in Node.js using Redis",
+  "main": "lib/redis-queue.js",
+  "directories": {
+    "lib": "lib",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "grunt"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chrisneave/redis-queue"
+  },
+  "author": "Chris Neave",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/chrisneave/redis-queue/issues"
+  },
+  "homepage": "https://github.com/chrisneave/redis-queue",
+  "devDependencies": {
+    "grunt": "~0.4.2",
+    "grunt-contrib-jshint": "~0.8.0",
+    "grunt-contrib-watch": "~0.5.3",
+    "mocha": "~1.16.2",
+    "chai": "~1.8.1",
+    "istanbul": "~0.2.3",
+    "grunt-clear": "~0.2.1",
+    "grunt-contrib-clean": "~0.5.0",
+    "grunt-open": "~0.2.2",
+    "grunt-simple-mocha": "~0.4.0"
+  }
+}

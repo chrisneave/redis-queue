@@ -1,0 +1,22 @@
+node_modules
+
+lib-cov
+*.seed
+*.log
+*.csv
+*.dat
+*.out
+*.pid
+*.gz
+
+pids
+logs
+results
+build
+
+# Various IDE project files
+*.sublime-*
+.idea
+
+# Istanbul code coverage output
+coverage
