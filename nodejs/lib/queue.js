@@ -15,4 +15,8 @@
 
 'use strict';
 
-exports.Queue = require(__dirname + '/queue');
+function Queue() {
+
+}
+
+module.exports = Queue;
