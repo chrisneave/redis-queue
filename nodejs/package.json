@@ -25,14 +25,13 @@
     "grunt-contrib-jshint": "~0.8.0",
     "grunt-contrib-watch": "~0.5.3",
     "mocha": "~1.16.2",
-    "chai": "~1.8.1",
     "istanbul": "~0.2.3",
     "grunt-clear": "~0.2.1",
     "grunt-contrib-clean": "~0.5.0",
     "grunt-open": "~0.2.2",
     "grunt-simple-mocha": "~0.4.0",
     "sinon": "~1.7.3",
-    "sinon-chai": "~2.4.0"
+    "expect.js": "~0.2.0"
   },
   "dependencies": {
     "redis": "~0.10.0"

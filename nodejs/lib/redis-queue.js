@@ -15,4 +15,17 @@
 
 'use strict';
 
-exports.Queue = require(__dirname + '/queue');
+exports.create = function(queue_name) {
+  if (!queue_name) { throw 'A queue name must be supplied'; }
+  return {
+    name: queue_name,
+    push: function(client, message) {
+      client.lpush(queue_name, message);
+    },
+    pop: function(client, done) {
+      client.rpop(queue_name, function(err, result) {
+        done(err, result[1]);
+      });
+    }
+  };
+};
