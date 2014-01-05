@@ -1,13 +1,13 @@
 # redis-queue
 
-A queue implementation in Node.js using Redis
+A queue implementation in Node.js using Redis lists for the queues.
 
 ## Getting Started
 Install the module with: `npm install redis-queue`
 
 ```javascript
 var redis_queue = require('redis-queue');
-redis_queue.awesome(); // "awesome"
+redis_queue.create('my_queue');
 ```
 
 ## Documentation
