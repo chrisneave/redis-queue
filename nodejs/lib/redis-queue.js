@@ -15,15 +15,17 @@
 
 'use strict';
 
-exports.create = function(queue_name) {
+exports.create = function(client, queue_name) {
   if (!queue_name) { throw 'A queue name must be supplied'; }
+  var _client = client;
+
   return {
     name: queue_name,
-    push: function(client, message) {
-      client.lpush(queue_name, message);
+    push: function(message) {
+      _client.lpush(queue_name, message);
     },
-    pop: function(client, done) {
-      client.rpop(queue_name, function(err, result) {
+    pop: function(done) {
+      _client.rpop(queue_name, function(err, result) {
         done(err, result[1]);
       });
     }

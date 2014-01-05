@@ -18,20 +18,20 @@ describe('redis-queue', function() {
 
   describe('#create', function() {
     it('can new a Queue', function() {
-      var new_q = queue.create('new queue');
+      var new_q = queue.create(_client, 'new queue');
       expect(new_q).to.be.a('object');
     });
 
     it('must be created with a name', function() {
       var fn = function() {
-        queue.create();
+        queue.create(_client);
       };
       expect(fn).to.throwException('A queue name must be supplied');
     });
   });
 
   it('has a name', function() {
-      var new_q = queue.create('new queue');
+      var new_q = queue.create(_client, 'new queue');
       expect(new_q.name).to.equal('new queue');
   });
 
@@ -41,12 +41,12 @@ describe('redis-queue', function() {
       var my_queue = 'new queue',
           my_message = 'my_message',
           spy = sinon.spy(_client, 'lpush'),
-          new_q = queue.create(my_queue);
+          new_q = queue.create(_client, my_queue);
 
       spy.withArgs(my_queue, my_message);
 
       // Act
-      new_q.push(_client, my_message);
+      new_q.push(my_message);
 
       // Assert
       expect(spy.calledWith(my_queue, my_message)).to.be.ok();
@@ -58,14 +58,14 @@ describe('redis-queue', function() {
       // Arrange
       var my_queue = 'my_queue',
           my_message = 'my_message',
-          new_q = queue.create(my_queue),
+          new_q = queue.create(_client, my_queue),
           err,
           stub = sinon.stub(_client, 'rpop', function(queue, callback) {
             callback(err, [my_queue, my_message]);
           });
 
       // Act
-      new_q.pop(_client, function() {
+      new_q.pop(function() {
         // Assert
         expect(stub.calledWith(my_queue)).to.be.ok();
         done();
@@ -76,14 +76,14 @@ describe('redis-queue', function() {
       // Arrange
       var my_queue = 'my_queue',
           my_message = 'my_message',
-          new_q = queue.create(my_queue),
+          new_q = queue.create(_client, my_queue),
           err = 'an error',
           stub = sinon.stub(_client, 'rpop', function(queue, callback) {
             callback(err, [my_queue, my_message]);
           });
 
       // Act
-      new_q.pop(_client, function(error) {
+      new_q.pop(function(error) {
         // Assert
         expect(error).to.equal(err);
         done();
@@ -94,14 +94,14 @@ describe('redis-queue', function() {
       // Arrange
       var my_queue = 'my_queue',
           my_message = 'my_message',
-          new_q = queue.create(my_queue),
+          new_q = queue.create(_client, my_queue),
           err,
           stub = sinon.stub(_client, 'rpop', function(queue, callback) {
             callback(err, [my_queue, my_message]);
           });
 
       // Act
-      new_q.pop(_client, function(error, message) {
+      new_q.pop(function(error, message) {
         // Assert
         expect(message).to.equal(my_message);
         done();
