@@ -1,6 +1,41 @@
+var fs = require('fs');
 var redis = require('redis');
 var client = redis.createClient('6379', '192.168.33.12');
 var iterations = 1000;
+
+// Redis keys
+// ----------
+//
+// message:keys
+//   SET containing all running message keys.
+// message:id
+//   KEY containing an icremental value used to generated a unique counter
+//       key for each message.
+// queue:submitted
+// queue:received
+// queue:finished_ok
+// queue:finished_with_error
+
+function loadScript(filename, done) {
+  var lua = fs.readFileSync(filename, 'utf8');
+
+  client.script('load', lua, function(err, result) {
+    console.log('Loaded script file %s => %s', filename, result);
+    done(err, result);
+  });
+}
+
+var send_message_hash;
+
+client.script('flush', function() {
+  loadScript(__dirname + '/send_message.lua', function(err, result) {
+    send_message_hash = result;
+    client.evalsha(send_message_hash, '1', 'message:id', redis.print);
+  });
+});
+
+
+//client.script('load', 'redis.call("HMSET", KEYS[1], KEYS[2])')
 
 // Post a new message request
 function postMessage(message, next) {
