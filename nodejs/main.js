@@ -20,22 +20,37 @@ function loadScript(filename, done) {
   var lua = fs.readFileSync(filename, 'utf8');
 
   client.script('load', lua, function(err, result) {
-    console.log('Loaded script file %s => %s', filename, result);
     done(err, result);
   });
 }
 
 var send_message_hash;
 
-client.script('flush', function() {
-  loadScript(__dirname + '/send_message.lua', function(err, result) {
-    send_message_hash = result;
-    client.evalsha(send_message_hash, '1', 'message:id', redis.print);
+
+function postMessageWithLua(message, next) {
+  client.time(function(err, result) {
+    var args = [
+      send_message_hash,
+      3,
+      'message:id',
+      'message:received',
+      message.job_code + "." + message.job_type,
+      message.body, // Don't JSON.Stringify() as this is already done by the caller.
+      result[0] + '.' + result[1]
+    ];
+
+    client.evalsha(args, function(err, result) {
+      if (err) throw err;
+      if (!result) return process.exit();
+      if (result === iterations) {
+        var elapsed_ms = new Date() - started;
+        console.log('Took %d ms to send %d messages - %d messages/second', elapsed_ms, iterations, Math.round(iterations / (elapsed_ms / 1000)));
+        client.end();
+        return process.exit();
+      }
+    });
   });
-});
-
-
-//client.script('load', 'redis.call("HMSET", KEYS[1], KEYS[2])')
+}
 
 // Post a new message request
 function postMessage(message, next) {
@@ -103,22 +118,36 @@ var readMessage = function() {
 var started = new Date();
 var messages_received = 0;
 
+function sendLoop(send_function) {
+  client.flushdb();
+
+  for (var i = 0; i < iterations; i++) {
+    send_function({
+      job_type: 'test',
+      job_code: 'code' + i,
+      body: JSON.stringify({field: i})
+    });
+  }
+}
+
 switch (process.argv[2]) {
   case '-r':
     readMessage();
     break;
 
-  case '-s': {
-      client.flushdb();
+  case '-s':
+    console.log('Sending %d messages using client commands', iterations);
+    sendLoop(postMessage);
+    break;
 
-      for (var i = 0; i < iterations; i++) {
-        postMessage({
-          job_type: 'test',
-          job_code: 'code' + i,
-          body: JSON.stringify({field: i})
-        });
-      }
-    }
+  case '-sl':
+    console.log('Sending %d messages using Lua script', iterations);
+    client.script('flush', function() {
+      loadScript(__dirname + '/send_message.lua', function(err, result) {
+        send_message_hash = result;
+        sendLoop(postMessageWithLua);
+      });
+    });
     break;
 
   default: {
