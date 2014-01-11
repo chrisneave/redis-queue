@@ -1,6 +1,7 @@
 -- KEYS[1] = key containing incremental message ID
 -- KEYS[2] = unique SET containing all received messages
 -- KEYS[3] = unique key value for the message
+-- KEYS[4] = key for the queue to push the message to
 -- ARGV[1] = message body JSON
 -- ARGV[2] = TIME value for requested_at
 
@@ -14,5 +15,5 @@ local m_key = "message:" .. m_id
 redis.call("HSET", m_key, "status", "submitted")
 redis.call("HSET", m_key, "body", ARGV[1])
 redis.call("HSET", m_key, "requested_at", ARGV[2])
-redis.call("LPUSH", "queue:submitted", m_id)
+redis.call("LPUSH", KEYS[4], m_id)
 return m_id

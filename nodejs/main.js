@@ -16,6 +16,12 @@ var iterations = 1000;
 // queue:finished_ok
 // queue:finished_with_error
 
+var submit_queue = 'queue:submitted';
+var receive_queue = 'queue:received';
+var finished_ok_queue = 'queue:finished_ok';
+var finished_with_error_queue = 'queue:finished_with_error';
+var received_messages = 'message:received';
+
 function loadScript(filename, done) {
   var lua = fs.readFileSync(filename, 'utf8');
 
@@ -24,17 +30,15 @@ function loadScript(filename, done) {
   });
 }
 
-var send_message_hash;
-
-
-function postMessageWithLua(message, next) {
+function postMessageWithLua(message, lua_hash) {
   client.time(function(err, result) {
     var args = [
-      send_message_hash,
-      3,
+      lua_hash,
+      4,
       'message:id',
-      'message:received',
+      received_messages,
       message.job_code + "." + message.job_type,
+      submit_queue,
       message.body, // Don't JSON.Stringify() as this is already done by the caller.
       result[0] + '.' + result[1]
     ];
@@ -53,7 +57,7 @@ function postMessageWithLua(message, next) {
 }
 
 // Post a new message request
-function postMessage(message, next) {
+function postMessage(message) {
   var multi = client.multi();
 
   client.hmget('message', 'job_code', 'job_type', function(err, result) {
@@ -70,7 +74,7 @@ function postMessage(message, next) {
 
       client.multi()
         .hmset('message:' + message.id, message)
-        .lpush('queued', message.id)
+        .lpush(submit_queue, message.id)
         .exec(function(err, results) {
           if (message.id === iterations) {
             var elapsed_ms = new Date() - started;
@@ -83,17 +87,46 @@ function postMessage(message, next) {
   });
 }
 
-var readMessage = function() {
-  client.brpoplpush('queued', 'received', 1, function(err, result) {
-    if (!result) {
-      var elapsed_ms = new Date() - started - 1000;
-      if (messages_received === 0) {
-        console.log('No messages received');
-      } else {
-        console.log('Took %d ms to received %d messages - %d messages/second', elapsed_ms, messages_received, Math.round(messages_received / (elapsed_ms / 1000)));
+function endReceive() {
+  var elapsed_ms = new Date() - started - 1000;
+  console.log(messages_received);
+  if (messages_received === 0) {
+    console.log('No messages received');
+  } else {
+    console.log('Took %d ms to received %d messages - %d messages/second', elapsed_ms, messages_received, Math.round(messages_received / (elapsed_ms / 1000)));
+  }
+  client.end();
+  return process.exit();
+}
+
+var receiveMessageWithLua = function(lua_hash) {
+  client.time(function(err, result) {
+    var now = result;
+    client.brpoplpush(submit_queue, receive_queue, 1, function(err, result) {
+      if (err) throw err; // Oops!
+      if (!result) {
+        return endReceive();
       }
-      client.end();
-      return process.exit();
+
+      messages_received++;
+      var args = [
+        lua_hash,
+        0,
+        now[0] + '.' + now[1],
+        result
+      ];
+
+      client.evalsha(args, function(err, result) {
+        receiveMessageWithLua(lua_hash);
+      });
+    });
+  });
+}
+
+var receiveMessage = function() {
+  client.brpoplpush(submit_queue, receive_queue, 1, function(err, result) {
+    if (!result) {
+      return endReceive();
     }
 
     messages_received++;
@@ -104,21 +137,20 @@ var readMessage = function() {
         .hmset('message:' + message_id, {status: 'processing', started_at: result[0]})
         .hget('message:' + message_id, 'body')
         .exec(function(err, results) {
-          //var body = JSON.parse(results[1]);
           client.time(function(err, result) {
             client.hmset('message:' + message_id, {status: 'finished ok', finished_at: result[0]});
           });
         });
       });
 
-    readMessage();
+    receiveMessage();
   });
 }
 
 var started = new Date();
 var messages_received = 0;
 
-function sendLoop(send_function) {
+function sendLoop(send_function, lua_hash) {
   client.flushdb();
 
   for (var i = 0; i < iterations; i++) {
@@ -126,13 +158,25 @@ function sendLoop(send_function) {
       job_type: 'test',
       job_code: 'code' + i,
       body: JSON.stringify({field: i})
-    });
+    }, lua_hash);
   }
 }
 
 switch (process.argv[2]) {
   case '-r':
-    readMessage();
+    console.log('Receiving messages using client commands');
+    receiveMessage();
+    break;
+
+  case '-rl':
+    console.log('Receiving messages using Lua script');
+    client.script('flush', function() {
+      loadScript(__dirname + '/receive_message.lua', function(err, result) {
+        if (err) return console.error(err);
+        receiveMessageWithLua(result);
+      });
+    });
+    receiveMessage();
     break;
 
   case '-s':
@@ -144,8 +188,8 @@ switch (process.argv[2]) {
     console.log('Sending %d messages using Lua script', iterations);
     client.script('flush', function() {
       loadScript(__dirname + '/send_message.lua', function(err, result) {
-        send_message_hash = result;
-        sendLoop(postMessageWithLua);
+        if (err) return console.error(err);
+        sendLoop(postMessageWithLua, result);
       });
     });
     break;
