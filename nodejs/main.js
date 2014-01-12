@@ -23,6 +23,12 @@ var finished_ok_queue = 'queue:finished_ok';
 var finished_with_error_queue = 'queue:finished_with_error';
 var received_messages = 'message:received';
 
+var handleError = function(err) {
+  if (!err) { return; }
+  console.error('An error occured: ' + err);
+  throw err;
+}
+
 function loadScript(filename, done) {
   var lua = fs.readFileSync(filename, 'utf8');
 
@@ -52,7 +58,7 @@ function sendMessageWithLua(message, lua_hash) {
     ];
 
     client.evalsha(args, function(err, result) {
-      if (err) throw err;
+      if (err) handleError(err);
       if (!result) return process.exit();
       if (result === iterations) {
         return endSend();
@@ -108,26 +114,23 @@ function endAction(action, adjustment) {
 
 var receiveMessageWithLua = function(lua_hash) {
   client.time(function(err, result) {
-    var now = result;
-    client.rpoplpush(submit_queue, receive_queue, function(err, result) {
-      if (err) throw err; // Oops!
+    var args = [
+      lua_hash,
+      2,
+      submit_queue,
+      receive_queue,
+      utils.redisTimeToJSDate(result)
+    ];
+
+    client.evalsha(args, function(err, result) {
+      if (err) handleError(err);
       if (!result) {
         return endAction('received', 0);
       }
-
       messages_received++;
-      var message_id = result;
-      var args = [
-        lua_hash,
-        0,
-        now[0] + '.' + now[1],
-        message_id
-      ];
-
-      client.evalsha(args, function() {});
-
-      receiveMessageWithLua(lua_hash);
     });
+
+    receiveMessageWithLua(lua_hash);
   });
 }
 
@@ -154,32 +157,64 @@ var receiveMessage = function() {
   });
 }
 
-function processMessages(finished_ok) {
-  var queue = (finished_ok) ? finished_ok_queue : finished_with_error_queue;
+function processMessages(message_id, finished_ok) {
+  var queue = (finished_ok) ? finished_ok_queue : finished_with_error_queue,
+      status = (finished_ok) ? 'finished ok' : 'finished with error',
+      m_key = 'message:' + message_id,
+      finished_at;
 
-  client.rpoplpush(receive_queue, queue, function(err, result) {
-    if (!result) {
-      return endAction('processed', 0);
-    }
-
-    messages_received++;
-
-    var m_key = 'message:' + result,
-        status = (finished_ok) ? 'finished ok' : 'finished with error';
+  client.time(function(err, result) {
+    finished_at = utils.redisTimeToJSDate(result);
 
     client.multi()
-      .time()
-      .hmget(m_key, 'status', 'concurrent_id')
+      .lrem(receive_queue, 1, message_id)
+      .lpush(queue, message_id)
+      .hset(m_key, 'status', status)
+      .hset(m_key, 'finished_at', finished_at)
+      .hget(m_key, 'concurrent_id')
       .exec(function(err, results) {
-        client.multi()
-          .hset(m_key, 'status', results[1][0])
-          .hset(m_key, 'finished_at', utils.redisTimeToJSDate(results[0]))
-          // Remove the unique message key from the SET of received messages.
-          .srem(received_messages, results[1][1])
-          .exec(function(err, result) {});
+        client.srem(received_messages, result[0], function(err, result) {
+          console.log(results);
+          if (!result) {
+            return endAction('processed', 0);
+          }
+
+          messages_received++;
+        });
       });
 
-    processMessages(!finished_ok);
+    processMessages(++message_id, !finished_ok);
+  });
+}
+
+function processMessagesWithLua(lua_hash, message_id, finished_ok) {
+  var queue = (finished_ok) ? finished_ok_queue : finished_with_error_queue,
+      status = (finished_ok) ? 'finished ok' : 'finished with error',
+      finished_at;
+
+  client.time(function(err, result) {
+    finished_at = utils.redisTimeToJSDate(result);
+
+    var args = [
+      lua_hash,
+      4,
+      receive_queue,
+      queue,
+      message_id,
+      received_messages,
+      status,
+      finished_at
+    ];
+
+    client.evalsha(args, function(err, result) {
+      if (err) handleError(err);
+      if (!result) {
+        return endAction('processed', 0);
+      }
+      messages_received++;
+    });
+
+    processMessagesWithLua(lua_hash, ++message_id, !finished_ok);
   });
 }
 
@@ -230,14 +265,19 @@ switch (process.argv[2]) {
     });
     break;
 
-  case '-e':
-    console.log('Ending the processing of %d messages', iterations);
-    processMessages(true);
+  case '-p':
+    console.log('Processing %d messages using client commands', iterations);
+    processMessages(1, true);
     break;
 
-  case '-el':
-    console.log('Ending the processing of %d messages', iterations);
-    processMessagesWithLua(true);
+  case '-pl':
+    console.log('Processing %d messages using Lua script', iterations);
+    client.script('flush', function() {
+      loadScript(__dirname + '/process_message.lua', function(err, result) {
+        if (err) return console.error(err);
+        processMessagesWithLua(result, 1, true);
+      });
+    });
     break;
 
   default: {
