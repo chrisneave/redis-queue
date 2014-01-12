@@ -1,6 +1,7 @@
 var fs = require('fs');
 var redis = require('redis');
 var client = redis.createClient('6379', '192.168.33.12');
+var utils = require(__dirname + '/lib/utils');
 var iterations = 1000;
 
 // Redis keys
@@ -30,7 +31,14 @@ function loadScript(filename, done) {
   });
 }
 
-function postMessageWithLua(message, lua_hash) {
+function endSend() {
+  var elapsed_ms = new Date() - started;
+  console.log('Took %d ms to send %d messages - %d messages/second', elapsed_ms, iterations, Math.round(iterations / (elapsed_ms / 1000)));
+  client.end();
+  process.exit();
+}
+
+function sendMessageWithLua(message, lua_hash) {
   client.time(function(err, result) {
     var args = [
       lua_hash,
@@ -40,28 +48,26 @@ function postMessageWithLua(message, lua_hash) {
       message.job_code + "." + message.job_type,
       submit_queue,
       message.body, // Don't JSON.Stringify() as this is already done by the caller.
-      result[0] + '.' + result[1]
+      utils.redisTimeToJSDate(result)
     ];
 
     client.evalsha(args, function(err, result) {
       if (err) throw err;
       if (!result) return process.exit();
       if (result === iterations) {
-        var elapsed_ms = new Date() - started;
-        console.log('Took %d ms to send %d messages - %d messages/second', elapsed_ms, iterations, Math.round(iterations / (elapsed_ms / 1000)));
-        client.end();
-        return process.exit();
+        return endSend();
       }
     });
   });
 }
 
 // Post a new message request
-function postMessage(message) {
+function sendMessage(message) {
   var multi = client.multi();
+  var concurrent_id = message.job_code + "." + message.job_type;
 
-  client.hmget('message', 'job_code', 'job_type', function(err, result) {
-    if (result[0] && result[0] === message.job_code && result[1] === message.job_type) {
+  client.sismember(received_messages, concurrent_id, function(err, result) {
+    if (result === 1) {
       return console.log('Duplicate message %s:%s', message.job_code, message.job_type);
     }
 
@@ -69,31 +75,32 @@ function postMessage(message) {
     multi.time();
     multi.exec(function(err, results) {
       message.id = results[0];
-      message.requested_at = results[1][0];
-      message.status = 'submitted';
+      var m_key = 'message:' + message.id;
 
       client.multi()
-        .hmset('message:' + message.id, message)
+        .hset(m_key, 'id', message.id)
+        .hset(m_key, 'status', 'submitted')
+        .hset(m_key, 'requested_at', utils.redisTimeToJSDate(results[1]))
+        .hset(m_key, 'concurrent_id', concurrent_id)
+        .hset(m_key, 'body', message.body)
+        .sadd(received_messages, concurrent_id)
         .lpush(submit_queue, message.id)
         .exec(function(err, results) {
           if (message.id === iterations) {
-            var elapsed_ms = new Date() - started;
-            console.log('Took %d ms to send %d messages - %d messages/second', elapsed_ms, iterations, Math.round(iterations / (elapsed_ms / 1000)));
-            client.end();
-            return process.exit();
+            return endSend();
           }
         });
     });
   });
 }
 
-function endReceive() {
-  var elapsed_ms = new Date() - started - 1000;
-  console.log(messages_received);
+function endAction(action, adjustment) {
+  if (!adjustment) { adjustment = 0; }
+  var elapsed_ms = new Date() - started + adjustment;
   if (messages_received === 0) {
-    console.log('No messages received');
+    console.log('No messages %s', action);
   } else {
-    console.log('Took %d ms to received %d messages - %d messages/second', elapsed_ms, messages_received, Math.round(messages_received / (elapsed_ms / 1000)));
+    console.log('Took %d ms to %s %d messages - %d messages/second', elapsed_ms, action, messages_received, Math.round(messages_received / (elapsed_ms / 1000)));
   }
   client.end();
   return process.exit();
@@ -102,23 +109,24 @@ function endReceive() {
 var receiveMessageWithLua = function(lua_hash) {
   client.time(function(err, result) {
     var now = result;
-    client.brpoplpush(submit_queue, receive_queue, 1, function(err, result) {
+    client.rpoplpush(submit_queue, receive_queue, function(err, result) {
       if (err) throw err; // Oops!
       if (!result) {
-        return endReceive();
+        return endAction('received', 0);
       }
 
       messages_received++;
+      var message_id = result;
       var args = [
         lua_hash,
         0,
         now[0] + '.' + now[1],
-        result
+        message_id
       ];
 
-      client.evalsha(args, function(err, result) {
-        receiveMessageWithLua(lua_hash);
-      });
+      client.evalsha(args, function() {});
+
+      receiveMessageWithLua(lua_hash);
     });
   });
 }
@@ -126,24 +134,52 @@ var receiveMessageWithLua = function(lua_hash) {
 var receiveMessage = function() {
   client.brpoplpush(submit_queue, receive_queue, 1, function(err, result) {
     if (!result) {
-      return endReceive();
+        return endAction('received', -1000);
     }
 
     messages_received++;
     var message_id = result[1];
 
     client.time(function(err, result) {
+      var m_key = 'message:' + message_id;
+
       client.multi()
-        .hmset('message:' + message_id, {status: 'processing', started_at: result[0]})
-        .hget('message:' + message_id, 'body')
-        .exec(function(err, results) {
-          client.time(function(err, result) {
-            client.hmset('message:' + message_id, {status: 'finished ok', finished_at: result[0]});
-          });
-        });
+        .hset(m_key, 'status', 'received')
+        .hset(m_key, 'started_at', utils.redisTimeToJSDate(result))
+        .hgetall(m_key)
+        .exec();
       });
 
     receiveMessage();
+  });
+}
+
+function processMessages(finished_ok) {
+  var queue = (finished_ok) ? finished_ok_queue : finished_with_error_queue;
+
+  client.rpoplpush(receive_queue, queue, function(err, result) {
+    if (!result) {
+      return endAction('processed', 0);
+    }
+
+    messages_received++;
+
+    var m_key = 'message:' + result,
+        status = (finished_ok) ? 'finished ok' : 'finished with error';
+
+    client.multi()
+      .time()
+      .hmget(m_key, 'status', 'concurrent_id')
+      .exec(function(err, results) {
+        client.multi()
+          .hset(m_key, 'status', results[1][0])
+          .hset(m_key, 'finished_at', utils.redisTimeToJSDate(results[0]))
+          // Remove the unique message key from the SET of received messages.
+          .srem(received_messages, results[1][1])
+          .exec(function(err, result) {});
+      });
+
+    processMessages(!finished_ok);
   });
 }
 
@@ -181,7 +217,7 @@ switch (process.argv[2]) {
 
   case '-s':
     console.log('Sending %d messages using client commands', iterations);
-    sendLoop(postMessage);
+    sendLoop(sendMessage);
     break;
 
   case '-sl':
@@ -189,9 +225,19 @@ switch (process.argv[2]) {
     client.script('flush', function() {
       loadScript(__dirname + '/send_message.lua', function(err, result) {
         if (err) return console.error(err);
-        sendLoop(postMessageWithLua, result);
+        sendLoop(sendMessageWithLua, result);
       });
     });
+    break;
+
+  case '-e':
+    console.log('Ending the processing of %d messages', iterations);
+    processMessages(true);
+    break;
+
+  case '-el':
+    console.log('Ending the processing of %d messages', iterations);
+    processMessagesWithLua(true);
     break;
 
   default: {

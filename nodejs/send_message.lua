@@ -12,8 +12,11 @@ end
 
 local m_id = redis.call("INCR", KEYS[1])
 local m_key = "message:" .. m_id
+redis.call("HSET", m_key, "id", m_id)
 redis.call("HSET", m_key, "status", "submitted")
-redis.call("HSET", m_key, "body", ARGV[1])
 redis.call("HSET", m_key, "requested_at", ARGV[2])
+redis.call("HSET", m_key ,"concurrent_id", KEYS[3])
+redis.call("HSET", m_key, "body", ARGV[1])
+redis.call("SADD", KEYS[2], KEYS[3])
 redis.call("LPUSH", KEYS[4], m_id)
 return m_id
