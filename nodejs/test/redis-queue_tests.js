@@ -7,105 +7,38 @@ var sinon = require('sinon');
 var queue = require('../lib/redis-queue.js');
 
 describe('redis-queue', function() {
-  var _client;
+  var client_spy = {
+    time: function() {}
+  }
 
   beforeEach(function() {
-    _client = {
-      lpush: function() {},
-      rpop: function() {}
-    };
+    queue.init(client_spy);
   });
 
-  describe('#create', function() {
-    it('can new a Queue', function() {
-      var new_q = queue.create(_client, 'new queue');
-      expect(new_q).to.be.a('object');
-    });
-
-    it('must be created with a name', function() {
-      var fn = function() {
-        queue.create(_client);
-      };
-      expect(fn).to.throwException('A queue name must be supplied');
-    });
-  });
-
-  it('has a name', function() {
-      var new_q = queue.create(_client, 'new queue');
-      expect(new_q.name).to.equal('new queue');
-  });
-
-  describe('#push', function() {
-    it('adds a message to the end of the queue', function() {
+  describe('#submit', function() {
+    it('uses the current Redis server time for the requested_at field', function() {
       // Arrange
-      var my_queue = 'new queue',
-          my_message = 'my_message',
-          spy = sinon.spy(_client, 'lpush'),
-          new_q = queue.create(_client, my_queue);
-
-      spy.withArgs(my_queue, my_message);
+      var queue_name = 'my_queue',
+          message = { foo: 'bar' },
+          spy = sinon.spy(client_spy, 'time');
 
       // Act
-      new_q.push(my_message);
+      queue.submit(queue_name, message);
 
       // Assert
-      expect(spy.calledWith(my_queue, my_message)).to.be.ok();
+      // *********** Mock the call to evalsha() and expect the value returned by
+      // the TIME mock to be passed in as parameter.
+      expect(spy.calledOnce).to.be.ok();
     });
+
+    it('posts the message to the queue');
+    it('allocates an incremental ID for the message');
   });
 
-  describe('#pop', function() {
-    it ('removes a message from the end of the queue', function(done) {
-      // Arrange
-      var my_queue = 'my_queue',
-          my_message = 'my_message',
-          new_q = queue.create(_client, my_queue),
-          err,
-          stub = sinon.stub(_client, 'rpop', function(queue, callback) {
-            callback(err, [my_queue, my_message]);
-          });
+  describe('#receive', function() {
+  });
 
-      // Act
-      new_q.pop(function() {
-        // Assert
-        expect(stub.calledWith(my_queue)).to.be.ok();
-        done();
-      });
-    });
+  describe('#finish', function() {
 
-    it('returns the error', function(done) {
-      // Arrange
-      var my_queue = 'my_queue',
-          my_message = 'my_message',
-          new_q = queue.create(_client, my_queue),
-          err = 'an error',
-          stub = sinon.stub(_client, 'rpop', function(queue, callback) {
-            callback(err, [my_queue, my_message]);
-          });
-
-      // Act
-      new_q.pop(function(error) {
-        // Assert
-        expect(error).to.equal(err);
-        done();
-      });
-    });
-
-    it('returns the message from the queue', function(done) {
-      // Arrange
-      var my_queue = 'my_queue',
-          my_message = 'my_message',
-          new_q = queue.create(_client, my_queue),
-          err,
-          stub = sinon.stub(_client, 'rpop', function(queue, callback) {
-            callback(err, [my_queue, my_message]);
-          });
-
-      // Act
-      new_q.pop(function(error, message) {
-        // Assert
-        expect(message).to.equal(my_message);
-        done();
-      });
-    });
   });
 });
