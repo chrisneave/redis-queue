@@ -6,9 +6,20 @@ var expect = require('expect.js');
 var sinon = require('sinon');
 var queue = require('../lib/redis-queue.js');
 
+var createArrayContainsMatcher = function(expected_value) {
+  return function(array) {
+    for (var i = 0; i < array.length; i++) {
+      if (new Date(array[i]).getTime() === expected_value.getTime()) { return true; }
+    }
+
+    return false;
+  }
+};
+
 describe('redis-queue', function() {
   var client_spy = {
-    time: function() {}
+    time: function() {},
+    evalsha: function() {}
   }
 
   beforeEach(function() {
@@ -20,7 +31,11 @@ describe('redis-queue', function() {
       // Arrange
       var queue_name = 'my_queue',
           message = { foo: 'bar' },
-          spy = sinon.spy(client_spy, 'time');
+          expected_date = new Date(1970, 0, 1, 0, 0, 0, 1389535019616),
+          spy = sinon.spy(client_spy, 'evalsha'),
+          stub = sinon.stub(client_spy, 'time', function(callback) {
+            callback(undefined, [1389535019, 616092]);
+          });
 
       // Act
       queue.submit(queue_name, message);
@@ -28,7 +43,7 @@ describe('redis-queue', function() {
       // Assert
       // *********** Mock the call to evalsha() and expect the value returned by
       // the TIME mock to be passed in as parameter.
-      expect(spy.calledOnce).to.be.ok();
+      expect(spy.calledWith(sinon.match(createArrayContainsMatcher(expected_date)))).to.be.ok();
     });
 
     it('posts the message to the queue');

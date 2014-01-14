@@ -15,6 +15,8 @@
 
 'use strict';
 
+var utils = require(__dirname + '/utils');
+
 var _client = {};
 
 exports.init = function(client) {
@@ -22,5 +24,8 @@ exports.init = function(client) {
 };
 
 exports.submit = function(queue_name, message) {
-  _client.time();
+  _client.time(function(err, result) {
+    var time = utils.redisTimeToJSDate(result);
+    _client.evalsha([time]);
+  });
 };
