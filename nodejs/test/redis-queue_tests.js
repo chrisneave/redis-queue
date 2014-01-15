@@ -6,8 +6,11 @@ var expect = require('expect.js');
 var sinon = require('sinon');
 var queue = require('../lib/redis-queue.js');
 
-var createArrayContainsMatcher = function(expected_value) {
+// Custom matcher that verifies whether the expected_value exists in the given array
+var arrayContains = function(expected_value, index) {
   return function(array) {
+    if (index) { return array[index]; }
+
     for (var i = 0; i < array.length; i++) {
       if (new Date(array[i]).getTime() === expected_value.getTime()) { return true; }
     }
@@ -41,9 +44,7 @@ describe('redis-queue', function() {
       queue.submit(queue_name, message);
 
       // Assert
-      // *********** Mock the call to evalsha() and expect the value returned by
-      // the TIME mock to be passed in as parameter.
-      expect(spy.calledWith(sinon.match(createArrayContainsMatcher(expected_date)))).to.be.ok();
+      expect(spy.calledWith(sinon.match(arrayContains(expected_date, 7)))).to.be.ok();
     });
 
     it('posts the message to the queue');

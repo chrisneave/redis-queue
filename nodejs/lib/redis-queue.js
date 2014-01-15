@@ -26,6 +26,6 @@ exports.init = function(client) {
 exports.submit = function(queue_name, message) {
   _client.time(function(err, result) {
     var time = utils.redisTimeToJSDate(result);
-    _client.evalsha([time]);
+    _client.evalsha([,,,,,,,time]);
   });
 };
