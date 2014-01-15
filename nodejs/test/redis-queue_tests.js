@@ -6,16 +6,27 @@ var expect = require('expect.js');
 var sinon = require('sinon');
 var queue = require('../lib/redis-queue.js');
 
-// Custom matcher that verifies whether the expected_value exists in the given array
-var arrayContains = function(expected_value, index) {
+// Custom matcher that verifies whether two arrays contain the same values
+var argsEquals = function(expected_args) {
   return function(array) {
-    if (index) { return array[index]; }
-
-    for (var i = 0; i < array.length; i++) {
-      if (new Date(array[i]).getTime() === expected_value.getTime()) { return true; }
+    if (array.length !== expected_args.length) {
+      return false;
     }
 
-    return false;
+    for (var i = 0; i < array.length; i++) {
+      if (array[i] instanceof Date) { // Handle Date elements
+        if (array[i].getTime() !== expected_args[i].getTime()) {
+          return false;
+        }
+      } else {
+        if (array[i] !== expected_args[i]) {
+          console.log(array[i] + ' !== ' + expected_args[i]);
+          return false;
+        }
+      }
+    }
+
+    return true;
   }
 };
 
@@ -30,25 +41,35 @@ describe('redis-queue', function() {
   });
 
   describe('#submit', function() {
-    it('uses the current Redis server time for the requested_at field', function() {
+    it('supplies the correct parameters to evalsha', function() {
       // Arrange
       var queue_name = 'my_queue',
           message = { foo: 'bar' },
-          expected_date = new Date(1970, 0, 1, 0, 0, 0, 1389535019616),
           spy = sinon.spy(client_spy, 'evalsha'),
           stub = sinon.stub(client_spy, 'time', function(callback) {
             callback(undefined, [1389535019, 616092]);
-          });
+          }),
+          expected_args = [],
+          matcher,
+          message_key = '123:abc';
+
+      expected_args.push('');
+      expected_args.push(4);
+      expected_args.push('message:id');
+      expected_args.push('message:received');
+      expected_args.push(message_key);
+      expected_args.push(queue_name);
+      expected_args.push(JSON.stringify(message));
+      expected_args.push(new Date(1970, 0, 1, 0, 0, 0, 1389535019616));
+
+      matcher = sinon.match(argsEquals(expected_args));
 
       // Act
-      queue.submit(queue_name, message);
+      queue.submit(queue_name, message_key, message);
 
       // Assert
-      expect(spy.calledWith(sinon.match(arrayContains(expected_date, 7)))).to.be.ok();
+      expect(spy.calledWith(matcher)).to.be.ok();
     });
-
-    it('posts the message to the queue');
-    it('allocates an incremental ID for the message');
   });
 
   describe('#receive', function() {
