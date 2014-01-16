@@ -16,16 +16,29 @@
 'use strict';
 
 var utils = require(__dirname + '/utils');
+var redis = require('redis');
 
-var _client = {};
-
-exports.init = function(client) {
-  _client = client;
+var ArgumentException = function() {
 };
 
-exports.submit = function(queue_name, message_key, message, callback) {
-  _client.time(function(err, result) {
+var Queue = function(client) {
+  // TODO: Need a better method of determining whether client is a RedisClient.
+  if (!client.server_info || !client.server_info.redis_version) {
+    throw new ArgumentException;
+  }
+
+  this._client = client;
+};
+
+Queue.prototype.submit = function(queue_name, message_key, message, callback) {
+  var self = this;
+
+  self._client.time(function(err, result) {
     var time = utils.redisTimeToJSDate(result);
-    _client.evalsha('', 4, 'message:id', 'message:received', message_key, queue_name, JSON.stringify(message), time, callback);
+    self._client.evalsha('', 4, 'message:id', 'message:received', message_key, queue_name, JSON.stringify(message), time, callback);
   });
 };
+
+module.exports.ArgumentException = ArgumentException;
+module.exports.Queue = Queue;
+
