@@ -23,19 +23,9 @@ exports.init = function(client) {
   _client = client;
 };
 
-exports.submit = function(queue_name, message_key, message) {
+exports.submit = function(queue_name, message_key, message, callback) {
   _client.time(function(err, result) {
-    var time = utils.redisTimeToJSDate(result),
-        args = [];
-    args.push('');
-    args.push(4);
-    args.push('message:id');
-    args.push('message:received');
-    args.push(message_key);
-    args.push(queue_name);
-    args.push(JSON.stringify(message));
-    args.push(time);
-
-    _client.evalsha(args);
+    var time = utils.redisTimeToJSDate(result);
+    _client.evalsha('', 4, 'message:id', 'message:received', message_key, queue_name, JSON.stringify(message), time, callback);
   });
 };
