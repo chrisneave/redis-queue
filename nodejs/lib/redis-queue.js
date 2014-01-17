@@ -16,7 +16,6 @@
 'use strict';
 
 var utils = require(__dirname + '/utils');
-var redis = require('redis');
 
 var ArgumentException = function() {
 };
@@ -24,10 +23,11 @@ var ArgumentException = function() {
 var Queue = function(client) {
   // TODO: Need a better method of determining whether client is a RedisClient.
   if (!client.server_info || !client.server_info.redis_version) {
-    throw new ArgumentException;
+    throw new ArgumentException();
   }
 
   this._client = client;
+  this._script_hash = {};
 };
 
 Queue.prototype.submit = function(queue_name, message_key, message, callback) {
@@ -36,6 +36,15 @@ Queue.prototype.submit = function(queue_name, message_key, message, callback) {
   self._client.time(function(err, result) {
     var time = utils.redisTimeToJSDate(result);
     self._client.evalsha('', 4, 'message:id', 'message:received', message_key, queue_name, JSON.stringify(message), time, callback);
+  });
+};
+
+Queue.prototype.receive = function(submit_queue, receive_queue, callback) {
+  var self = this;
+
+  self._client.time(function(err, result) {
+    var time = utils.redisTimeToJSDate(result);
+    self._client.evalsha(self._script_hash.receive_message, 2, submit_queue, receive_queue, time, callback);
   });
 };
 
