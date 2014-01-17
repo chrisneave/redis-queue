@@ -17,6 +17,9 @@ describe('Queue', function() {
   var receive_queue = 'my_receive_queue';
   var message = { foo: 'bar' };
   var message_key = '123:abc';
+  var spy;
+  var stub;
+  var queue;
 
   beforeEach(function() {
     client = {};
@@ -25,6 +28,19 @@ describe('Queue', function() {
     client.evalsha = function() {};
     client.script = function() {};
     client.server_info = {redis_version: '2.3.0'};
+
+    spy = sinon.spy(client, 'evalsha');
+
+    stub = sinon.stub(client, 'time', function(callback) {
+      callback(undefined, redis_time);
+    });
+
+    queue = new Queue(client);
+  });
+
+  afterEach(function() {
+    client.evalsha.restore();
+    client.time.restore();
   });
 
   describe('#ctor', function() {
@@ -55,27 +71,15 @@ describe('Queue', function() {
   describe('#submit', function() {
     it('issues the TIME command once', function() {
       // Arrange
-      var stub = sinon.spy(client, 'evalsha'),
-          spy = sinon.stub(client, 'time', function(callback) {
-            callback(undefined, redis_time);
-          }),
-          queue = new Queue(client);
-
       // Act
       queue.submit(submit_queue, message_key, message);
 
       // Assert
-      expect(spy.calledOnce).to.be.ok();
+      expect(stub.calledOnce).to.be.ok();
     });
 
     it('calls evalsha once', function() {
       // Arrange
-      var spy = sinon.spy(client, 'evalsha'),
-          stub = sinon.stub(client, 'time', function(callback) {
-            callback(undefined, [1389535019, 616092]);
-          }),
-          queue = new Queue(client);
-
       // Act
       queue.submit(submit_queue, message_key, message);
 
@@ -85,12 +89,6 @@ describe('Queue', function() {
 
     it('passes the name of the destination queue to evalsha', function() {
       // Arrange
-      var spy = sinon.spy(client, 'evalsha'),
-          stub = sinon.stub(client, 'time', function(callback) {
-            callback(undefined, [1389535019, 616092]);
-          }),
-          queue = new Queue(client);
-
       // Act
       queue.submit(submit_queue, message_key, message);
 
@@ -100,12 +98,6 @@ describe('Queue', function() {
 
     it('passes the name unique message key to evalsha', function() {
       // Arrange
-      var spy = sinon.spy(client, 'evalsha'),
-          stub = sinon.stub(client, 'time', function(callback) {
-            callback(undefined, redis_time);
-          }),
-          queue = new Queue(client);
-
       // Act
       queue.submit(submit_queue, message_key, message);
 
@@ -115,12 +107,6 @@ describe('Queue', function() {
 
     it('passes the result of issuing the TIME command to evalsha', function() {
       // Arrange
-      var spy = sinon.spy(client, 'evalsha'),
-          stub = sinon.stub(client, 'time', function(callback) {
-            callback(undefined, redis_time);
-          }),
-          queue = new Queue(client);
-
       // Act
       queue.submit(submit_queue, message_key, message);
 
@@ -130,12 +116,6 @@ describe('Queue', function() {
 
     it('passes a JSON stringified message to evalsha as an argument', function() {
       // Arrange
-      var spy = sinon.spy(client, 'evalsha'),
-          stub = sinon.stub(client, 'time', function(callback) {
-            callback(undefined, redis_time);
-          }),
-          queue = new Queue(client);
-
       // Act
       queue.submit(submit_queue, message_key, message);
 
@@ -145,11 +125,8 @@ describe('Queue', function() {
 
     it('invokes the callback with an undefined error after a successful submission', function(done) {
       // Arrange
-      var evalsha_stub = sinon.stub(client, 'evalsha'),
-          stub = sinon.stub(client, 'time', function(callback) {
-            callback(undefined, redis_time);
-          }),
-          queue = new Queue(client);
+      client.evalsha.restore();
+      var evalsha_stub = sinon.stub(client, 'evalsha');
 
       evalsha_stub.yields();
 
@@ -163,11 +140,8 @@ describe('Queue', function() {
 
     it('invokes the callback with the new message ID after a successful submission', function(done) {
       // Arrange
-      var evalsha_stub = sinon.stub(client, 'evalsha'),
-          stub = sinon.stub(client, 'time', function(callback) {
-            callback(undefined, redis_time);
-          }),
-          queue = new Queue(client);
+      client.evalsha.restore();
+      var evalsha_stub = sinon.stub(client, 'evalsha');
 
       evalsha_stub.yields(undefined, [1337]);
 
@@ -183,24 +157,15 @@ describe('Queue', function() {
   describe('#receive', function() {
     it('issues the TIME command once', function() {
       // Arrange
-      var stub = sinon.spy(client, 'evalsha'),
-          spy = sinon.stub(client, 'time', function(callback) {
-            callback(undefined, redis_time);
-          }),
-          queue = new Queue(client);
-
       // Act
       queue.receive(submit_queue);
 
       // Assert
-      expect(spy.calledOnce).to.be.ok();
+      expect(stub.calledOnce).to.be.ok();
     });
 
     it('calls evalsha once', function() {
       // Arrange
-      var spy = sinon.stub(client, 'evalsha'),
-          queue = new Queue(client);
-
       // Act
       queue.receive(submit_queue, function(err, result) {
         // Assert
@@ -210,12 +175,7 @@ describe('Queue', function() {
 
     it('passes the sha1 hash returned from LOAD SCRIPT to evalsha', function() {
       // Arrange
-      var lua_hash = 'abc123xyz',
-          spy = sinon.spy(client, 'evalsha'),
-          stub = sinon.stub(client, 'time', function(callback) {
-            callback(undefined, redis_time);
-          }),
-          queue = new Queue(client);
+      var lua_hash = 'abc123xyz';
 
       queue['_script_hash'] = { receive_message: lua_hash };
 
@@ -228,12 +188,6 @@ describe('Queue', function() {
 
     it('passes the correct number of keys to EVALSHA', function() {
       // Arrange
-      var spy = sinon.spy(client, 'evalsha'),
-          stub = sinon.stub(client, 'time', function(callback) {
-            callback(undefined, redis_time);
-          }),
-          queue = new Queue(client);
-
       // Act
       queue.receive(submit_queue);
 
@@ -243,12 +197,6 @@ describe('Queue', function() {
 
     it('passes the name of the submit queue to evalsha', function() {
       // Arrange
-      var spy = sinon.spy(client, 'evalsha'),
-          stub = sinon.stub(client, 'time', function(callback) {
-            callback(undefined, redis_time);
-          }),
-          queue = new Queue(client);
-
       // Act
       queue.receive(submit_queue);
 
@@ -258,12 +206,6 @@ describe('Queue', function() {
 
     it('passes the name of the receive queue to evalsha', function() {
       // Arrange
-      var spy = sinon.spy(client, 'evalsha'),
-          stub = sinon.stub(client, 'time', function(callback) {
-            callback(undefined, redis_time);
-          }),
-          queue = new Queue(client);
-
       // Act
       queue.receive(submit_queue, receive_queue);
 
@@ -273,12 +215,6 @@ describe('Queue', function() {
 
     it('passes the result of issuing the TIME command to evalsha', function() {
       // Arrange
-      var spy = sinon.spy(client, 'evalsha'),
-          stub = sinon.stub(client, 'time', function(callback) {
-            callback(undefined, redis_time);
-          }),
-          queue = new Queue(client);
-
       // Act
       queue.receive(submit_queue);
 
@@ -288,11 +224,8 @@ describe('Queue', function() {
 
     it('invokes the callback with an undefined error after a successfully receiving a message', function(done) {
       // Arrange
-      var evalsha_stub = sinon.stub(client, 'evalsha'),
-          stub = sinon.stub(client, 'time', function(callback) {
-            callback(undefined, redis_time);
-          }),
-          queue = new Queue(client);
+      client.evalsha.restore();
+      var evalsha_stub = sinon.stub(client, 'evalsha');
 
       evalsha_stub.yields();
 
@@ -306,11 +239,8 @@ describe('Queue', function() {
 
     it('invokes the callback with the message received from the submit queue', function(done) {
       // Arrange
-      var evalsha_stub = sinon.stub(client, 'evalsha'),
-          stub = sinon.stub(client, 'time', function(callback) {
-            callback(undefined, redis_time);
-          }),
-          queue = new Queue(client);
+      client.evalsha.restore();
+      var evalsha_stub = sinon.stub(client, 'evalsha');
 
       evalsha_stub.yields(undefined, message);
 

@@ -15,6 +15,7 @@
     "require": true,
     "describe": true,
     "it": true,
-    "beforeEach": true
+    "beforeEach": true,
+    "afterEach": true
   }
 }
