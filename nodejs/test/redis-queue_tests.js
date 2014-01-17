@@ -11,6 +11,8 @@ var util = require('util');
 
 describe('Queue', function() {
   var client;
+  var redis_time = [1389535019, 616092];
+  var js_time = new Date(1970, 0, 1, 0, 0, 0, 1389535019616);
 
   beforeEach(function() {
     client = {};
@@ -88,7 +90,7 @@ describe('Queue', function() {
           message = { foo: 'bar' },
           spy = sinon.spy(client, 'evalsha'),
           stub = sinon.stub(client, 'time', function(callback) {
-            callback(undefined, [1389535019, 616092]);
+            callback(undefined, redis_time);
           }),
           message_key = '123:abc',
           queue = new Queue(client);
@@ -100,13 +102,49 @@ describe('Queue', function() {
       expect(spy.args[0].indexOf(message_key) >= 0).to.be.ok();
     });
 
+    it('issues the TIME command once', function() {
+      // Arrange
+      var queue_name = 'my_queue',
+          message = { foo: 'bar' },
+          stub = sinon.spy(client, 'evalsha'),
+          spy = sinon.stub(client, 'time', function(callback) {
+            callback(undefined, redis_time);
+          }),
+          message_key = '123:abc',
+          queue = new Queue(client);
+
+      // Act
+      queue.submit(queue_name, message_key, message);
+
+      // Assert
+      expect(spy.calledOnce).to.be.ok();
+    });
+
+    it('passes the result of issuing the TIME command to evalsha', function() {
+      // Arrange
+      var queue_name = 'my_queue',
+          message = { foo: 'bar' },
+          spy = sinon.spy(client, 'evalsha'),
+          stub = sinon.stub(client, 'time', function(callback) {
+            callback(undefined, redis_time);
+          }),
+          message_key = '123:abc',
+          queue = new Queue(client);
+
+      // Act
+      queue.submit(queue_name, message_key, message);
+
+      // Assert
+      expect(spy.args[0][7].getTime() === js_time.getTime()).to.be.ok();
+    })
+
     it('passes a JSON stringified message to evalsha as an argument', function() {
       // Arrange
       var queue_name = 'my_queue',
           message = { foo: 'bar' },
           spy = sinon.spy(client, 'evalsha'),
           stub = sinon.stub(client, 'time', function(callback) {
-            callback(undefined, [1389535019, 616092]);
+            callback(undefined, redis_time);
           }),
           message_key = '123:abc',
           queue = new Queue(client);
@@ -124,7 +162,7 @@ describe('Queue', function() {
           message = { foo: 'bar' },
           evalsha_stub = sinon.stub(client, 'evalsha'),
           stub = sinon.stub(client, 'time', function(callback) {
-            callback(undefined, [1389535019, 616092]);
+            callback(undefined, redis_time);
           }),
           message_key = '123:abc',
           queue = new Queue(client);
@@ -145,7 +183,7 @@ describe('Queue', function() {
           message = { foo: 'bar' },
           evalsha_stub = sinon.stub(client, 'evalsha'),
           stub = sinon.stub(client, 'time', function(callback) {
-            callback(undefined, [1389535019, 616092]);
+            callback(undefined, redis_time);
           }),
           message_key = '123:abc',
           queue = new Queue(client);
@@ -165,6 +203,5 @@ describe('Queue', function() {
   });
 
   describe('#finish', function() {
-
   });
 });
