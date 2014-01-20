@@ -1,7 +1,7 @@
 var fs = require('fs');
 var redis = require('redis');
 var client = redis.createClient('6379', '192.168.33.12');
-var utils = require(__dirname + '/lib/utils');
+var utils = require(__dirname + '/../../lib/utils');
 var iterations = 1000;
 
 // Redis keys
@@ -242,7 +242,7 @@ switch (process.argv[2]) {
   case '-rl':
     console.log('Receiving messages using Lua script');
     client.script('flush', function() {
-      loadScript(__dirname + '/receive_message.lua', function(err, result) {
+      loadScript(__dirname + '/../../lua/receive_message.lua', function(err, result) {
         if (err) return console.error(err);
         receiveMessageWithLua(result);
       });
@@ -258,7 +258,7 @@ switch (process.argv[2]) {
   case '-sl':
     console.log('Sending %d messages using Lua script', iterations);
     client.script('flush', function() {
-      loadScript(__dirname + '/send_message.lua', function(err, result) {
+      loadScript(__dirname + '/../../lua/send_message.lua', function(err, result) {
         if (err) return console.error(err);
         sendLoop(sendMessageWithLua, result);
       });
@@ -273,7 +273,7 @@ switch (process.argv[2]) {
   case '-pl':
     console.log('Processing %d messages using Lua script', iterations);
     client.script('flush', function() {
-      loadScript(__dirname + '/process_message.lua', function(err, result) {
+      loadScript(__dirname + '/../../lua/process_message.lua', function(err, result) {
         if (err) return console.error(err);
         processMessagesWithLua(result, 1, true);
       });

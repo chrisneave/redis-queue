@@ -11,11 +11,17 @@ module.exports = function(grunt) {
       gruntfile: {
         src: 'Gruntfile.js'
       },
+      main: {
+        src: ['index.js']
+      },
       lib: {
         src: ['lib/**/*.js']
       },
       test: {
         src: ['test/**/*.js']
+      },
+      examples: {
+        src: ['examples/**/*.js']
       },
     },
     watch: {
