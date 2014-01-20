@@ -4,9 +4,9 @@
 
 var expect = require('expect.js');
 var sinon = require('sinon');
-var redis_queue = require('../lib/redis-queue.js');
-var Queue = redis_queue.Queue;
-var ArgumentException = redis_queue.ArgumentException;
+var rq = require(__dirname + '/../index');
+var Queue = rq.Queue;
+var exceptions = rq.Exceptions;
 var util = require('util');
 
 describe('Queue', function() {
@@ -63,7 +63,7 @@ describe('Queue', function() {
         var queue = new Queue(client);
       }).to.throwException(function(e) {
         // Assert
-        expect(e).to.be.a(ArgumentException);
+        expect(e).to.be.an(exceptions.ArgumentException);
       });
     });
   });

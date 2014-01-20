@@ -15,7 +15,5 @@
 
 'use strict';
 
-module.exports.redisTimeToJSDate = function(time) {
-  var ms_since_epoc = Math.round(time[0] * 1000 + time[1] / 1000);
-  return new Date(ms_since_epoc);
-};
+module.exports.Exceptions = require(__dirname + '/lib/exceptions');
+module.exports.Queue = require(__dirname + '/lib/queue');
