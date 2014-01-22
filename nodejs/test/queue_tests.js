@@ -87,6 +87,19 @@ describe('Queue', function() {
       expect(spy.calledOnce).to.be.ok();
     });
 
+    it('passes the sha1 hash returned from LOAD SCRIPT to evalsha', function() {
+      // Arrange
+      var lua_hash = 'abc123xyz';
+
+      queue['_script_hash'] = { send_message: lua_hash };
+
+      // Act
+      queue.submit(submit_queue);
+
+      // Assert
+      expect(spy.args[0][0] === lua_hash).to.be.ok();
+    });
+
     it('passes the name of the destination queue to evalsha', function() {
       // Arrange
       // Act

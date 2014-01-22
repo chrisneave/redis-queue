@@ -33,7 +33,7 @@ Queue.prototype.submit = function(queue_name, message_key, message, callback) {
 
   self._client.time(function(err, result) {
     var time = utils.redisTimeToJSDate(result);
-    self._client.evalsha('', 4, 'message:id', 'message:received', message_key, queue_name, JSON.stringify(message), time, callback);
+    self._client.evalsha(self._script_hash.send_message, 4, 'message:id', 'message:received', message_key, queue_name, JSON.stringify(message), time, callback);
   });
 };
 
