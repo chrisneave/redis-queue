@@ -7,7 +7,7 @@ process.on('message', function(message) {
   var duration = Math.floor(Math.random() * 1000) + 1;
   console.log('%d processing work %s in %dms', process.pid, message, duration);
   setTimeout(function() {
-    client.rpoplpush(process.pid, 'finished_ok', function(err, result) {
+    client.rpoplpush(process.pid, 'finished_ok', function() {
       process.send({pid: process.pid, work: message});
     });
   }, duration);

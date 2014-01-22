@@ -1,6 +1,4 @@
 var redis = require('redis');
-var queued = 'queued';
-var received = 'received';
 var start = new Date();
 var total_items_read = 0;
 

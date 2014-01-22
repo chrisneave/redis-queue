@@ -8,21 +8,11 @@ var cp = require('child_process'),
       received: 'received',
       finished_ok: 'finished_ok',
       finished_with_error: 'finished_with_error '
-    }
+    },
+    worker,
+    child;
 
 console.log('Parent process started => pid = %d', process.pid);
-
-for (var i = 0; i < max_workers; i++) {
-  child = cp.fork(__dirname + '/child.js');
-  var worker = {child: child, state: 'idle'};
-
-  console.log('Creating child process %d', child.pid);
-  workers[child.pid] = {child: child, state: 'idle'};
-
-  child.on('message', function(message) {
-    workCompleted(message);
-  });
-}
 
 var getIdleWorker = function() {
   for (var pid in workers) {
@@ -33,7 +23,7 @@ var getIdleWorker = function() {
   }
 };
 
-var waitForWork = function(callback) {
+var waitForWork = function() {
   var idle_worker = getIdleWorker();
   if (!idle_worker) {
     console.log('No free workers. Will now wait for a free worker before reading from the queue');
@@ -64,5 +54,19 @@ var workCompleted = function(message) {
   worker.state = 'idle';
   waitForWork();
 };
+
+var onCompleted = function(message) {
+  workCompleted(message);
+};
+
+for (var i = 0; i < max_workers; i++) {
+  child = cp.fork(__dirname + '/child.js');
+  worker = {child: child, state: 'idle'};
+
+  console.log('Creating child process %d', child.pid);
+  workers[child.pid] = {child: child, state: 'idle'};
+
+  child.on('message', onCompleted);
+}
 
 waitForWork();

@@ -3,20 +3,8 @@ var redis = require('redis');
 var client = redis.createClient('6379', '192.168.33.12');
 var utils = require(__dirname + '/../../lib/utils');
 var iterations = 1000;
-
-// Redis keys
-// ----------
-//
-// message:keys
-//   SET containing all running message keys.
-// message:id
-//   KEY containing an icremental value used to generated a unique counter
-//       key for each message.
-// queue:submitted
-// queue:received
-// queue:finished_ok
-// queue:finished_with_error
-
+var started = new Date();
+var messages_received = 0;
 var submit_queue = 'queue:submitted';
 var receive_queue = 'queue:received';
 var finished_ok_queue = 'queue:finished_ok';
@@ -27,7 +15,7 @@ var handleError = function(err) {
   if (!err) { return; }
   console.error('An error occured: ' + err);
   throw err;
-}
+};
 
 function loadScript(filename, done) {
   var lua = fs.readFileSync(filename, 'utf8');
@@ -58,8 +46,8 @@ function sendMessageWithLua(message, lua_hash) {
     ];
 
     client.evalsha(args, function(err, result) {
-      if (err) handleError(err);
-      if (!result) return process.exit();
+      if (err) { handleError(err); }
+      if (!result) { return process.exit(); }
       if (result === iterations) {
         return endSend();
       }
@@ -91,7 +79,7 @@ function sendMessage(message) {
         .hset(m_key, 'body', message.body)
         .sadd(received_messages, concurrent_id)
         .lpush(submit_queue, message.id)
-        .exec(function(err, results) {
+        .exec(function() {
           if (message.id === iterations) {
             return endSend();
           }
@@ -123,7 +111,7 @@ var receiveMessageWithLua = function(lua_hash) {
     ];
 
     client.evalsha(args, function(err, result) {
-      if (err) handleError(err);
+      if (err) { handleError(err); }
       if (!result) {
         return endAction('received', 0);
       }
@@ -132,7 +120,7 @@ var receiveMessageWithLua = function(lua_hash) {
 
     receiveMessageWithLua(lua_hash);
   });
-}
+};
 
 var receiveMessage = function() {
   client.brpoplpush(submit_queue, receive_queue, 1, function(err, result) {
@@ -155,7 +143,7 @@ var receiveMessage = function() {
 
     receiveMessage();
   });
-}
+};
 
 function processMessages(message_id, finished_ok) {
   var queue = (finished_ok) ? finished_ok_queue : finished_with_error_queue,
@@ -207,7 +195,7 @@ function processMessagesWithLua(lua_hash, message_id, finished_ok) {
     ];
 
     client.evalsha(args, function(err, result) {
-      if (err) handleError(err);
+      if (err) { handleError(err); }
       if (!result) {
         return endAction('processed', 0);
       }
@@ -217,9 +205,6 @@ function processMessagesWithLua(lua_hash, message_id, finished_ok) {
     processMessagesWithLua(lua_hash, ++message_id, !finished_ok);
   });
 }
-
-var started = new Date();
-var messages_received = 0;
 
 function sendLoop(send_function, lua_hash) {
   client.flushdb();
@@ -243,7 +228,7 @@ switch (process.argv[2]) {
     console.log('Receiving messages using Lua script');
     client.script('flush', function() {
       loadScript(__dirname + '/../../lua/receive_message.lua', function(err, result) {
-        if (err) return console.error(err);
+        if (err) { return console.error(err); }
         receiveMessageWithLua(result);
       });
     });
@@ -259,7 +244,7 @@ switch (process.argv[2]) {
     console.log('Sending %d messages using Lua script', iterations);
     client.script('flush', function() {
       loadScript(__dirname + '/../../lua/send_message.lua', function(err, result) {
-        if (err) return console.error(err);
+        if (err) { return console.error(err); }
         sendLoop(sendMessageWithLua, result);
       });
     });
@@ -274,7 +259,7 @@ switch (process.argv[2]) {
     console.log('Processing %d messages using Lua script', iterations);
     client.script('flush', function() {
       loadScript(__dirname + '/../../lua/process_message.lua', function(err, result) {
-        if (err) return console.error(err);
+        if (err) { return console.error(err); }
         processMessagesWithLua(result, 1, true);
       });
     });
