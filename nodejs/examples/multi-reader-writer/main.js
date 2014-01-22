@@ -10,6 +10,7 @@ var receive_queue = 'queue:received';
 var finished_ok_queue = 'queue:finished_ok';
 var finished_with_error_queue = 'queue:finished_with_error';
 var received_messages = 'message:received';
+var Queue = require(__dirname + '/../../lib/queue');
 
 var handleError = function(err) {
   if (!err) { return; }
@@ -33,25 +34,13 @@ function endSend() {
 }
 
 function sendMessageWithLua(message, lua_hash) {
-  client.time(function(err, result) {
-    var args = [
-      lua_hash,
-      4,
-      'message:id',
-      received_messages,
-      message.job_code + "." + message.job_type,
-      submit_queue,
-      message.body, // Don't JSON.Stringify() as this is already done by the caller.
-      utils.redisTimeToJSDate(result)
-    ];
-
-    client.evalsha(args, function(err, result) {
-      if (err) { handleError(err); }
-      if (!result) { return process.exit(); }
-      if (result === iterations) {
-        return endSend();
-      }
-    });
+  var queue = new Queue(client, {send_script_hash: lua_hash});
+  queue.submit(submit_queue, message.job_code + "." + message.job_type, message.body, function(err, result) {
+    if (err) { handleError(err); }
+    if (!result) { return process.exit(); }
+    if (result === iterations) {
+      return endSend();
+    }
   });
 }
 
@@ -101,24 +90,13 @@ function endAction(action, adjustment) {
 }
 
 var receiveMessageWithLua = function(lua_hash) {
-  client.time(function(err, result) {
-    var args = [
-      lua_hash,
-      2,
-      submit_queue,
-      receive_queue,
-      utils.redisTimeToJSDate(result)
-    ];
-
-    client.evalsha(args, function(err, result) {
-      if (err) { handleError(err); }
-      if (!result) {
-        return endAction('received', 0);
-      }
-      messages_received++;
-    });
-
-    receiveMessageWithLua(lua_hash);
+  var queue = new Queue(client, {receive_script_hash: lua_hash});
+  queue.receive(submit_queue, receive_queue, function(err, result) {
+    if (err) { handleError(err); }
+    if (!result) {
+      return endAction('received', 0);
+    }
+    messages_received++;
   });
 };
 
