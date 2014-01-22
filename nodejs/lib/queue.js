@@ -18,14 +18,18 @@
 var utils = require(__dirname + '/utils');
 var exceptions = require(__dirname + '/exceptions');
 
-var Queue = function(client) {
+var Queue = function(client, options) {
   // TODO: Need a better method of determining whether client is a RedisClient.
   if (!client.server_info || !client.server_info.redis_version) {
     throw new exceptions.ArgumentException();
   }
 
   this._client = client;
-  this._script_hash = {};
+  this._scripts = {};
+  if (options) {
+    this._scripts.send = options['send_script_hash'];
+    this._scripts.receive = options['receive_script_hash'];
+  }
 };
 
 Queue.prototype.submit = function(queue_name, message_key, message, callback) {
@@ -33,7 +37,7 @@ Queue.prototype.submit = function(queue_name, message_key, message, callback) {
 
   self._client.time(function(err, result) {
     var time = utils.redisTimeToJSDate(result);
-    self._client.evalsha(self._script_hash.send_message, 4, 'message:id', 'message:received', message_key, queue_name, JSON.stringify(message), time, callback);
+    self._client.evalsha(self._scripts.send, 4, 'message:id', 'message:received', message_key, queue_name, JSON.stringify(message), time, callback);
   });
 };
 
@@ -42,7 +46,7 @@ Queue.prototype.receive = function(submit_queue, receive_queue, callback) {
 
   self._client.time(function(err, result) {
     var time = utils.redisTimeToJSDate(result);
-    self._client.evalsha(self._script_hash.receive_message, 2, submit_queue, receive_queue, time, callback);
+    self._client.evalsha(self._scripts.receive, 2, submit_queue, receive_queue, time, callback);
   });
 };
 

@@ -66,6 +66,28 @@ describe('Queue', function() {
         expect(e).to.be.an(exceptions.ArgumentException);
       });
     });
+
+    it('stores the send_hash value from the options object in the script hash', function() {
+      // Arrange
+      var lua_hash = 'myhashvalue';
+
+      // Act
+      var queue = new Queue(client, {send_script_hash: lua_hash});
+
+      // Assert
+      expect(queue._scripts.send).to.equal(lua_hash);
+    });
+
+    it('stores the receive_hash value from the options object in the script hash', function() {
+      // Arrange
+      var lua_hash = 'myhashvalue';
+
+      // Act
+      var queue = new Queue(client, {receive_script_hash: lua_hash});
+
+      // Assert
+      expect(queue._scripts.receive).to.equal(lua_hash);
+    });
   });
 
   describe('#submit', function() {
@@ -91,7 +113,7 @@ describe('Queue', function() {
       // Arrange
       var lua_hash = 'abc123xyz';
 
-      queue['_script_hash'] = { send_message: lua_hash };
+      queue['_scripts'] = { send: lua_hash };
 
       // Act
       queue.submit(submit_queue);
@@ -190,7 +212,7 @@ describe('Queue', function() {
       // Arrange
       var lua_hash = 'abc123xyz';
 
-      queue['_script_hash'] = { receive_message: lua_hash };
+      queue['_scripts'] = { receive: lua_hash };
 
       // Act
       queue.receive(submit_queue);
