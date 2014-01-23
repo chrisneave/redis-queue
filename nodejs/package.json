@@ -33,7 +33,8 @@
     "sinon": "~1.7.3",
     "expect.js": "~0.2.0",
     "chai": "~1.8.1",
-    "sinon-chai": "~2.4.0"
+    "sinon-chai": "~2.4.0",
+    "commander": "~2.1.0"
   },
   "dependencies": {
     "redis": "~0.10.0"
