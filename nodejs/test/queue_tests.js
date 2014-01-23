@@ -88,6 +88,17 @@ describe('Queue', function() {
       // Assert
       expect(queue._scripts.receive).to.equal(lua_hash);
     });
+
+    it('stores the receive_hash value from the options object in the script hash', function() {
+      // Arrange
+      var lua_hash = 'myhashvalue';
+
+      // Act
+      var queue = new Queue(client, {finish_script_hash: lua_hash});
+
+      // Assert
+      expect(queue._scripts.finish).to.equal(lua_hash);
+    });
   });
 
   describe('#submit', function() {
@@ -289,5 +300,22 @@ describe('Queue', function() {
   });
 
   describe('#finish', function() {
+    it('issues the TIME command once');
+    it('calls evalsha once', function() {
+      // Arrange
+      var lua_hash = 'abc123xyz',
+          receive_queue = 'queue:receive',
+          finish_queue = 'queue:finished_ok',
+          message_id = 'message_id:123',
+          status = 'finished ok',
+          callback = function() {};
+      queue['_scripts'] = { finish: lua_hash };
+
+      // Act
+      queue.finish(receive_queue, finish_queue, message_id, status, callback);
+
+      // Assert
+      expect(spy.calledWithExactly(lua_hash, 4, receive_queue, finish_queue, message_id, 'message:received', status, js_time, callback)).to.be.ok();
+    });
   });
 });

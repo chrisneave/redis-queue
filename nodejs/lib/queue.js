@@ -29,6 +29,7 @@ var Queue = function(client, options) {
   if (options) {
     this._scripts.send = options['send_script_hash'];
     this._scripts.receive = options['receive_script_hash'];
+    this._scripts.finish = options['finish_script_hash'];
   }
 };
 
@@ -47,6 +48,15 @@ Queue.prototype.receive = function(submit_queue, receive_queue, callback) {
   self._client.time(function(err, result) {
     var time = utils.redisTimeToJSDate(result);
     self._client.evalsha(self._scripts.receive, 2, submit_queue, receive_queue, time, callback);
+  });
+};
+
+Queue.prototype.finish = function(receive_queue, finish_queue, message_id, status, callback) {
+  var self = this;
+
+  self._client.time(function(err, result) {
+    var time = utils.redisTimeToJSDate(result);
+    self._client.evalsha(self._scripts.finish, 4, receive_queue, finish_queue, message_id, 'message:received', status, time, callback);
   });
 };
 
