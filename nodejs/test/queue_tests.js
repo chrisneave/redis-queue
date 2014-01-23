@@ -113,60 +113,18 @@ describe('Queue', function() {
 
     it('calls evalsha once', function() {
       // Arrange
-      // Act
-      queue.submit(submit_queue, message_key, message);
-
-      // Assert
-      expect(spy.calledOnce).to.be.ok();
-    });
-
-    it('passes the sha1 hash returned from LOAD SCRIPT to evalsha', function() {
-      // Arrange
-      var lua_hash = 'abc123xyz';
-
+      var lua_hash = 'abc123xyz',
+          submit_queue = 'queue:submitted',
+          message_key = 'message:id',
+          message = {field: '123'},
+          callback = function() {};
       queue['_scripts'] = { send: lua_hash };
 
       // Act
-      queue.submit(submit_queue);
+      queue.submit(submit_queue, message_key, message, callback);
 
       // Assert
-      expect(spy.args[0][0] === lua_hash).to.be.ok();
-    });
-
-    it('passes the name of the destination queue to evalsha', function() {
-      // Arrange
-      // Act
-      queue.submit(submit_queue, message_key, message);
-
-      // Assert
-      expect(spy.args[0].indexOf(submit_queue) >= 0).to.be.ok();
-    });
-
-    it('passes the name unique message key to evalsha', function() {
-      // Arrange
-      // Act
-      queue.submit(submit_queue, message_key, message);
-
-      // Assert
-      expect(spy.args[0].indexOf(message_key) >= 0).to.be.ok();
-    });
-
-    it('passes the result of issuing the TIME command to evalsha', function() {
-      // Arrange
-      // Act
-      queue.submit(submit_queue, message_key, message);
-
-      // Assert
-      expect(spy.args[0][7].getTime() === js_time.getTime()).to.be.ok();
-    });
-
-    it('passes a JSON stringified message to evalsha as an argument', function() {
-      // Arrange
-      // Act
-      queue.submit(submit_queue, message_key, message);
-
-      // Assert
-      expect(spy.args[0].indexOf(JSON.stringify(message)) >= 0).to.be.ok();
+      expect(spy.calledWithExactly(lua_hash, 4, 'message:id', 'message:received', message_key, submit_queue, JSON.stringify(message), js_time, callback)).to.be.ok();
     });
 
     it('invokes the callback with an undefined error after a successful submission', function(done) {
@@ -212,60 +170,17 @@ describe('Queue', function() {
 
     it('calls evalsha once', function() {
       // Arrange
-      // Act
-      queue.receive(submit_queue, function(err, result) {
-        // Assert
-        expect(spy.calledOnce).to.be.ok();
-      });
-    });
-
-    it('passes the sha1 hash returned from LOAD SCRIPT to evalsha', function() {
-      // Arrange
-      var lua_hash = 'abc123xyz';
-
+      var lua_hash = 'abc123xyz',
+          submit_queue = 'queue:submitted',
+          receive_queue = 'queue:received',
+          callback = function() {};
       queue['_scripts'] = { receive: lua_hash };
 
       // Act
-      queue.receive(submit_queue);
+      queue.receive(submit_queue, receive_queue, callback);
 
       // Assert
-      expect(spy.args[0][0] === lua_hash).to.be.ok();
-    });
-
-    it('passes the correct number of keys to EVALSHA', function() {
-      // Arrange
-      // Act
-      queue.receive(submit_queue);
-
-      // Assert
-      expect(spy.args[0][1] === 2).to.be.ok();
-    });
-
-    it('passes the name of the submit queue to evalsha', function() {
-      // Arrange
-      // Act
-      queue.receive(submit_queue);
-
-      // Assert
-      expect(spy.args[0][2] === submit_queue).to.be.ok();
-    });
-
-    it('passes the name of the receive queue to evalsha', function() {
-      // Arrange
-      // Act
-      queue.receive(submit_queue, receive_queue);
-
-      // Assert
-      expect(spy.args[0][3] === receive_queue).to.be.ok();
-    });
-
-    it('passes the result of issuing the TIME command to evalsha', function() {
-      // Arrange
-      // Act
-      queue.receive(submit_queue);
-
-      // Assert
-      expect(spy.args[0][4].getTime() === js_time.getTime()).to.be.ok();
+      expect(spy.calledWithExactly(lua_hash, 2, submit_queue, receive_queue, js_time, callback)).to.be.ok();
     });
 
     it('invokes the callback with an undefined error after a successfully receiving a message', function(done) {
