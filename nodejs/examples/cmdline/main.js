@@ -20,7 +20,6 @@ var handleError = function(err) {
 
 function loadScript(filename, done) {
   var lua = fs.readFileSync(filename, 'utf8');
-
   client.script('load', lua, function(err, result) {
     done(err, result);
   });
@@ -31,50 +30,6 @@ function endSend() {
   console.log('Took %d ms to send %d messages - %d messages/second', elapsed_ms, iterations, Math.round(iterations / (elapsed_ms / 1000)));
   client.end();
   process.exit();
-}
-
-function sendMessageWithLua(message, lua_hash) {
-  var queue = new Queue(client, {send_script_hash: lua_hash});
-  queue.submit(submit_queue, message.job_code + "." + message.job_type, message.body, function(err, result) {
-    if (err) { handleError(err); }
-    if (!result) { return process.exit(); }
-    if (result === iterations) {
-      return endSend();
-    }
-  });
-}
-
-// Post a new message request
-function sendMessage(message) {
-  var multi = client.multi();
-  var concurrent_id = message.job_code + "." + message.job_type;
-
-  client.sismember(received_messages, concurrent_id, function(err, result) {
-    if (result === 1) {
-      return console.log('Duplicate message %s:%s', message.job_code, message.job_type);
-    }
-
-    multi.incr('message_id');
-    multi.time();
-    multi.exec(function(err, results) {
-      message.id = results[0];
-      var m_key = 'message:' + message.id;
-
-      client.multi()
-        .hset(m_key, 'id', message.id)
-        .hset(m_key, 'status', 'submitted')
-        .hset(m_key, 'requested_at', utils.redisTimeToJSDate(results[1]))
-        .hset(m_key, 'concurrent_id', concurrent_id)
-        .hset(m_key, 'body', message.body)
-        .sadd(received_messages, concurrent_id)
-        .lpush(submit_queue, message.id)
-        .exec(function() {
-          if (message.id === iterations) {
-            return endSend();
-          }
-        });
-    });
-  });
 }
 
 function endAction(action, adjustment) {
@@ -89,101 +44,6 @@ function endAction(action, adjustment) {
   return process.exit();
 }
 
-var receiveMessageWithLua = function(lua_hash) {
-  var queue = new Queue(client, {receive_script_hash: lua_hash});
-  queue.receive(submit_queue, receive_queue, function(err, result) {
-    if (err) { handleError(err); }
-    if (!result) {
-      return endAction('received', 0);
-    }
-    messages_received++;
-  });
-};
-
-var receiveMessage = function() {
-  client.brpoplpush(submit_queue, receive_queue, 1, function(err, result) {
-    if (!result) {
-        return endAction('received', -1000);
-    }
-
-    messages_received++;
-    var message_id = result[1];
-
-    client.time(function(err, result) {
-      var m_key = 'message:' + message_id;
-
-      client.multi()
-        .hset(m_key, 'status', 'received')
-        .hset(m_key, 'started_at', utils.redisTimeToJSDate(result))
-        .hgetall(m_key)
-        .exec();
-      });
-
-    receiveMessage();
-  });
-};
-
-function processMessages(message_id, finished_ok) {
-  var queue = (finished_ok) ? finished_ok_queue : finished_with_error_queue,
-      status = (finished_ok) ? 'finished ok' : 'finished with error',
-      m_key = 'message:' + message_id,
-      finished_at;
-
-  client.time(function(err, result) {
-    finished_at = utils.redisTimeToJSDate(result);
-
-    client.multi()
-      .lrem(receive_queue, 1, message_id)
-      .lpush(queue, message_id)
-      .hset(m_key, 'status', status)
-      .hset(m_key, 'finished_at', finished_at)
-      .hget(m_key, 'concurrent_id')
-      .exec(function(err, results) {
-        client.srem(received_messages, result[0], function(err, result) {
-          console.log(results);
-          if (!result) {
-            return endAction('processed', 0);
-          }
-
-          messages_received++;
-        });
-      });
-
-    processMessages(++message_id, !finished_ok);
-  });
-}
-
-function processMessagesWithLua(lua_hash, message_id, finished_ok) {
-  var queue = (finished_ok) ? finished_ok_queue : finished_with_error_queue,
-      status = (finished_ok) ? 'finished ok' : 'finished with error',
-      finished_at;
-
-  client.time(function(err, result) {
-    finished_at = utils.redisTimeToJSDate(result);
-
-    var args = [
-      lua_hash,
-      4,
-      receive_queue,
-      queue,
-      message_id,
-      received_messages,
-      status,
-      finished_at
-    ];
-
-    client.evalsha(args, function(err, result) {
-      if (err) { handleError(err); }
-      if (!result) {
-        return endAction('processed', 0);
-      }
-      messages_received++;
-    });
-
-    processMessagesWithLua(lua_hash, ++message_id, !finished_ok);
-  });
-}
-
 function sendLoop(send_function, lua_hash) {
   client.flushdb();
 
@@ -196,29 +56,46 @@ function sendLoop(send_function, lua_hash) {
   }
 }
 
+function sendMessageWithLua(message, lua_hash) {
+  var queue = new Queue(client, {send_script_hash: lua_hash});
+  queue.submit(submit_queue, message.job_code + "." + message.job_type, message.body, function(err, result) {
+    if (err) { handleError(err); }
+    if (!result) { return process.exit(); }
+    if (result === iterations) {
+      return endSend();
+    }
+  });
+}
+
+var receiveMessageWithLua = function(lua_hash) {
+  var queue = new Queue(client, {receive_script_hash: lua_hash});
+  queue.receive(submit_queue, receive_queue, function(err, result) {
+    if (err) { handleError(err); }
+    if (!result) {
+      return endAction('received', 0);
+    }
+    messages_received++;
+    receiveMessageWithLua(lua_hash);
+  });
+};
+
+function processMessagesWithLua(lua_hash, message_id, finished_ok) {
+  var queue = (finished_ok) ? finished_ok_queue : finished_with_error_queue,
+      status = (finished_ok) ? 'finished ok' : 'finished with error',
+      finished_at,
+      queue = new Queue(client, {finish_script_hash: lua_hash});
+  queue.finish(receive_queue, queue, message_id, status, function(err, result) {
+    if (err) { handleError(err); }
+    if (!result) {
+      return endAction('finished', 0);
+    }
+    messages_received++;
+    processMessagesWithLua(lua_hash, ++message_id, !finished_ok);
+  });
+}
+
 switch (process.argv[2]) {
-  case '-r':
-    console.log('Receiving messages using client commands');
-    receiveMessage();
-    break;
-
-  case '-rl':
-    console.log('Receiving messages using Lua script');
-    client.script('flush', function() {
-      loadScript(__dirname + '/../../lua/receive_message.lua', function(err, result) {
-        if (err) { return console.error(err); }
-        receiveMessageWithLua(result);
-      });
-    });
-    receiveMessage();
-    break;
-
-  case '-s':
-    console.log('Sending %d messages using client commands', iterations);
-    sendLoop(sendMessage);
-    break;
-
-  case '-sl':
+  case '-send':
     console.log('Sending %d messages using Lua script', iterations);
     client.script('flush', function() {
       loadScript(__dirname + '/../../lua/send_message.lua', function(err, result) {
@@ -228,13 +105,18 @@ switch (process.argv[2]) {
     });
     break;
 
-  case '-p':
-    console.log('Processing %d messages using client commands', iterations);
-    processMessages(1, true);
+  case '-receive':
+    console.log('Receiving messages using Lua script');
+    client.script('flush', function() {
+      loadScript(__dirname + '/../../lua/receive_message.lua', function(err, result) {
+        if (err) { return console.error(err); }
+        receiveMessageWithLua(result);
+      });
+    });
     break;
 
-  case '-pl':
-    console.log('Processing %d messages using Lua script', iterations);
+  case '-finish':
+    console.log('Finishing %d messages using Lua script', iterations);
     client.script('flush', function() {
       loadScript(__dirname + '/../../lua/process_message.lua', function(err, result) {
         if (err) { return console.error(err); }
