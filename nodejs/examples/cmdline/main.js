@@ -1,7 +1,6 @@
 var fs = require('fs');
 var redis = require('redis');
 var client = redis.createClient('6379', '192.168.33.12');
-var utils = require(__dirname + '/../../lib/utils');
 var iterations = 1000;
 var started = new Date();
 var messages_received = 0;
@@ -9,7 +8,6 @@ var submit_queue = 'queue:submitted';
 var receive_queue = 'queue:received';
 var finished_ok_queue = 'queue:finished_ok';
 var finished_with_error_queue = 'queue:finished_with_error';
-var received_messages = 'message:received';
 var Queue = require(__dirname + '/../../lib/queue');
 
 var handleError = function(err) {
@@ -80,11 +78,11 @@ var receiveMessageWithLua = function(lua_hash) {
 };
 
 function processMessagesWithLua(lua_hash, message_id, finished_ok) {
-  var queue = (finished_ok) ? finished_ok_queue : finished_with_error_queue,
+  var finish_queue = (finished_ok) ? finished_ok_queue : finished_with_error_queue,
       status = (finished_ok) ? 'finished ok' : 'finished with error',
-      finished_at,
       queue = new Queue(client, {finish_script_hash: lua_hash});
-  queue.finish(receive_queue, queue, message_id, status, function(err, result) {
+
+  queue.finish(receive_queue, finish_queue, message_id, status, function(err, result) {
     if (err) { handleError(err); }
     if (!result) {
       return endAction('finished', 0);
