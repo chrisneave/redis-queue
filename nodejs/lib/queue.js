@@ -60,4 +60,10 @@ Queue.prototype.finish = function(receive_queue, finish_queue, message_id, statu
   });
 };
 
+Queue.prototype.getQueueLength = function(queue_name, callback) {
+  var self = this;
+
+  self._client.llen(queue_name, callback);
+};
+
 module.exports = Queue;

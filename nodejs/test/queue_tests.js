@@ -27,6 +27,7 @@ describe('Queue', function() {
     client.time = function() {};
     client.evalsha = function() {};
     client.script = function() {};
+    client.llen = function() {};
     client.server_info = {redis_version: '2.3.0'};
 
     spy = sinon.spy(client, 'evalsha');
@@ -231,6 +232,40 @@ describe('Queue', function() {
 
       // Assert
       expect(spy.calledWithExactly(lua_hash, 4, receive_queue, finish_queue, message_id, 'message:received', status, js_time, callback)).to.be.ok();
+    });
+  });
+
+  describe('#getQueueLength', function() {
+    it('returns the length of the given queue', function(done) {
+      // Arrange
+      var err;
+      var queue_length = 10;
+      var queue_name = 'my_queue';
+      stub = sinon.stub(client, 'llen');
+      stub.withArgs(queue_name).yields(err, queue_length);
+
+      // Act
+      queue.getQueueLength(queue_name, function(err, result) {
+        // Assert
+        expect(result).to.equal(queue_length);
+        done();
+      });
+    });
+
+    it('returns the length of the given queue', function(done) {
+      // Arrange
+      var err;
+      var queue_name = 'my_queue';
+      stub = sinon.stub(client, 'llen');
+      stub.withArgs('my_queue2').yields(err, 10);
+      stub.withArgs('my_queue').yields(err, 0);
+
+      // Act
+      queue.getQueueLength(queue_name, function(err, result) {
+        // Assert
+        expect(result).to.equal(0);
+        done();
+      });
     });
   });
 });
