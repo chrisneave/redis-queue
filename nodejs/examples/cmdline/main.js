@@ -30,11 +30,35 @@ function loadScript(filename, done) {
   });
 }
 
+function dumpQueueStats(callback) {
+  var queue = new Queue(client);
+
+  queue.getQueueLength(submit_queue, function(err, result) {
+    console.log('Submit queue length = %d', result);
+
+    queue.getQueueLength(receive_queue, function(err, result) {
+      console.log('Receive queue length = %d', result);
+
+      queue.getQueueLength(finished_ok_queue, function(err, result) {
+        console.log('Finished Ok queue length = %d', result);
+
+        queue.getQueueLength(finished_with_error_queue, function(err, result) {
+          console.log('Finished With Error queue length = %d', result);
+
+          callback();
+        });
+      });
+    });
+  });
+}
+
 function endSend() {
   var elapsed_ms = new Date() - started;
   console.log('Took %d ms to send %d messages - %d messages/second', elapsed_ms, iterations, Math.round(iterations / (elapsed_ms / 1000)));
-  client.end();
-  process.exit();
+  dumpQueueStats(function() {
+    client.end();
+    process.exit();
+  });
 }
 
 function endAction(action, adjustment) {
@@ -45,8 +69,10 @@ function endAction(action, adjustment) {
   } else {
     console.log('Took %d ms to %s %d messages - %d messages/second', elapsed_ms, action, messages_received, Math.round(messages_received / (elapsed_ms / 1000)));
   }
-  client.end();
-  return process.exit();
+  dumpQueueStats(function() {
+    client.end();
+    return process.exit();
+  });
 }
 
 function sendLoop(send_function, lua_hash) {
