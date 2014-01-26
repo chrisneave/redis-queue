@@ -33,22 +33,12 @@ function loadScript(filename, done) {
 function dumpQueueStats(callback) {
   var queue = new Queue(client);
 
-  queue.getQueueLength(submit_queue, function(err, result) {
-    console.log('Submit queue length = %d', result);
-
-    queue.getQueueLength(receive_queue, function(err, result) {
-      console.log('Receive queue length = %d', result);
-
-      queue.getQueueLength(finished_ok_queue, function(err, result) {
-        console.log('Finished Ok queue length = %d', result);
-
-        queue.getQueueLength(finished_with_error_queue, function(err, result) {
-          console.log('Finished With Error queue length = %d', result);
-
-          callback();
-        });
-      });
-    });
+  queue.getQueueLength([submit_queue, receive_queue, finished_ok_queue, finished_with_error_queue], function(err, result) {
+    console.log('Submit queue length = %d', result[0]);
+    console.log('Receive queue length = %d', result[1]);
+    console.log('Finished Ok queue length = %d', result[2]);
+    console.log('Finished With Error queue length = %d', result[3]);
+    callback();
   });
 }
 

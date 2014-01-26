@@ -267,5 +267,22 @@ describe('Queue', function() {
         done();
       });
     });
+
+    it('accepts multiple queue name parameters and returns the length of each as an array', function(done) {
+      // Arrange
+      var err;
+      stub = sinon.stub(client, 'llen');
+      stub.withArgs('my_queue1').yields(err, 1);
+      stub.withArgs('my_queue2').yields(err, 3);
+      stub.withArgs('my_queue3').yields(err, 5);
+      var expected = [1, 3, 5];
+
+      // Act
+      queue.getQueueLength(['my_queue1', 'my_queue2', 'my_queue3'], function(err, result) {
+        // Assert
+        expect(result).to.eql(expected);
+        done();
+      });
+    });
   });
 });

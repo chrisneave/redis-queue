@@ -60,10 +60,39 @@ Queue.prototype.finish = function(receive_queue, finish_queue, message_id, statu
   });
 };
 
-Queue.prototype.getQueueLength = function(queue_name, callback) {
-  var self = this;
+Queue.prototype.getQueueLength = function(queue_names, callback, results) {
+  var self = this,
+      err,
+      results = results || [],
+      item;
 
-  self._client.llen(queue_name, callback);
+  // Coerce non-array arguments into a single element Array.
+  if (Object.prototype.toString.call(queue_names) !== '[object Array]') {
+    queue_names = [queue_names];
+  }
+
+  item = queue_names.shift();
+
+  // If there are no queues left to query then invoke the callback and return.
+  if (!item) {
+    // Coerce a single result from an array to a single value.
+    if (results.length === 1) {
+      results = results[0];
+    }
+
+    callback(err, results);
+    return;
+  }
+
+  self._client.llen(item, function(err, result) {
+    if (err) {
+      callback(err, results);
+      return;
+    }
+
+    results.push(result);
+    self.getQueueLength(queue_names, callback, results);
+  });
 };
 
 module.exports = Queue;
