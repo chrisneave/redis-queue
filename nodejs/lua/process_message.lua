@@ -6,7 +6,7 @@
 -- ARGV[2] = Value of the finished_at field
 
 local m_id = redis.call("LREM", KEYS[1], 1, KEYS[3])
-if m_id then
+if m_id > 0 then
   redis.call("LPUSH", KEYS[2], KEYS[3])
   local m_key = "message:" .. m_id
   local concurrent_id = redis.call("HGET", m_key, "concurrent_id")
