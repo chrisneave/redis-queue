@@ -1,8 +1,8 @@
 var fs = require('fs');
+var util = require('util');
 var redis = require('redis');
 var client = redis.createClient('6379', '192.168.33.12');
 var started;
-var messages_received = 0;
 var submit_queue = 'queue:submitted';
 var receive_queue = 'queue:received';
 var finished_ok_queue = 'queue:finished_ok';
@@ -15,7 +15,7 @@ program
   .option('-m, --messages <m>', 'the number of messages to send', parseInt)
   .parse(process.argv);
 
-var iterations = program.messages || 1000;
+var iterations = 0;
 
 var handleError = function(err) {
   if (!err) { return; }
@@ -54,10 +54,10 @@ function endSend() {
 function endAction(action, adjustment) {
   if (!adjustment) { adjustment = 0; }
   var elapsed_ms = new Date() - started + adjustment;
-  if (messages_received === 0) {
+  if (iterations === 0) {
     console.log('No messages %s', action);
   } else {
-    console.log('Took %d ms to %s %d messages - %d messages/second', elapsed_ms, action, messages_received, Math.round(messages_received / (elapsed_ms / 1000)));
+    console.log('Took %d ms to %s %d messages - %d messages/second', elapsed_ms, action, iterations, Math.round(iterations / (elapsed_ms / 1000)));
   }
   dumpQueueStats(function() {
     client.end();
@@ -65,17 +65,17 @@ function endAction(action, adjustment) {
   });
 }
 
-function sendLoop(send_function, lua_hash) {
+function sendLoop(lua_hash, send_function) {
   for (var i = 0; i < iterations; i++) {
-    send_function({
+    send_function(lua_hash, {
       job_type: 'test',
       job_code: 'code' + i,
       body: JSON.stringify({field: i})
-    }, lua_hash);
+    });
   }
 }
 
-function sendMessageWithLua(message, lua_hash) {
+function sendMessageWithLua(lua_hash, message) {
   var queue = new Queue(client, {send_script_hash: lua_hash});
 
   queue.submit(submit_queue, message.job_code + "." + message.job_type, message.body, function(err, result) {
@@ -92,66 +92,70 @@ var receiveMessageWithLua = function(lua_hash) {
 
   queue.receive(submit_queue, receive_queue, function(err, result) {
     if (err) { handleError(err); }
-    if (messages_received === iterations || !result) {
+    if (!result) {
       return endAction('received', 0);
     }
-    messages_received++;
+    iterations++;
     receiveMessageWithLua(lua_hash);
   });
 };
 
 function processMessagesWithLua(lua_hash, message_id, finished_ok) {
+  if (!message_id) { message_id = 1; }
+  if (finished_ok === undefined) { finished_ok = true; }
+
   var finish_queue = (finished_ok) ? finished_ok_queue : finished_with_error_queue,
       status = (finished_ok) ? 'finished ok' : 'finished with error',
       queue = new Queue(client, {finish_script_hash: lua_hash});
 
   queue.finish(receive_queue, finish_queue, message_id, status, function(err, result) {
     if (err) { handleError(err); }
-    if (messages_received === iterations || !result) {
+    if (!result) {
       return endAction('finished', 0);
     }
-    messages_received++;
+    iterations++;
     processMessagesWithLua(lua_hash, ++message_id, !finished_ok);
   });
 }
+
+var run = function(message, lua_script, exec_function) {
+  console.log(message);
+  client.script('flush', function() {
+    loadScript(lua_script, function(err, result) {
+      if (err) { return console.error(err); }
+      started = new Date();
+      exec_function(result);
+    });
+  });
+};
 
 switch(process.argv[2]) {
   case 'send':
     client.flushdb();
 
-    console.log('Sending %d messages using Lua script', iterations);
-    client.script('flush', function() {
-      loadScript(__dirname + '/../../lua/send_message.lua', function(err, result) {
-        if (err) { return console.error(err); }
-        started = new Date();
-        sendLoop(sendMessageWithLua, result);
+    iterations = program.messages || 1000;
+
+    run(util.format('Sending %d messages using Lua script', iterations),
+      __dirname + '/../../lua/send_message.lua', function(result) {
+        sendLoop(result, sendMessageWithLua)
       });
-    });
     break;
 
   case 'receive':
-    console.log('Receiving messages using Lua script');
-    client.script('flush', function() {
-      loadScript(__dirname + '/../../lua/receive_message.lua', function(err, result) {
-        if (err) { return console.error(err); }
-        started = new Date();
-        receiveMessageWithLua(result);
-      });
-    });
+    run('Receiving messages using Lua script',
+      __dirname + '/../../lua/receive_message.lua',
+      receiveMessageWithLua)
     break;
 
   case 'finish':
-    console.log('Finishing %d messages using Lua script', iterations);
-    client.script('flush', function() {
-      loadScript(__dirname + '/../../lua/process_message.lua', function(err, result) {
-        if (err) { return console.error(err); }
-        started = new Date();
-        processMessagesWithLua(result, 1, true);
-      });
-    });
+    run('Finishing messages using Lua script',
+      __dirname + '/../../lua/process_message.lua',
+      processMessagesWithLua)
     break;
 
   default:
     console.error('Invalid arguments passed');
     return process.exit();
 }
+
+
