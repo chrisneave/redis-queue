@@ -15,6 +15,8 @@
 
 'use strict';
 
+var fs = require('fs');
+var crypto = require('crypto');
 var utils = require(__dirname + '/utils');
 var exceptions = require(__dirname + '/exceptions');
 
@@ -26,11 +28,6 @@ var Queue = function(client, options) {
 
   this._client = client;
   this._scripts = {};
-  if (options) {
-    this._scripts.send = options['send_script_hash'];
-    this._scripts.receive = options['receive_script_hash'];
-    this._scripts.finish = options['finish_script_hash'];
-  }
 };
 
 Queue.prototype.submit = function(queue_name, message_key, message, callback) {
@@ -38,7 +35,15 @@ Queue.prototype.submit = function(queue_name, message_key, message, callback) {
 
   self._client.time(function(err, result) {
     var time = utils.redisTimeToJSDate(result);
-    self._client.evalsha(self._scripts.send, 4, 'message:id', 'message:received', message_key, queue_name, JSON.stringify(message), time, callback);
+
+    var script = fs.readFileSync('../lua/send_message.lua', 'utf8');
+    var md5 = crypto.createHash('md5');
+    md5.update(script);
+    var script_hash = md5.digest('hex');
+
+    self._client.script('load', script_hash, function(err, result) {
+      self._client.evalsha(result, 4, 'message:id', 'message:received', message_key, queue_name, JSON.stringify(message), time, callback);
+    });
   });
 };
 

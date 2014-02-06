@@ -8,6 +8,8 @@ var rq = require(__dirname + '/../index');
 var Queue = rq.Queue;
 var exceptions = rq.Exceptions;
 var util = require('util');
+var fs = require('fs');
+var crypto = require('crypto');
 
 describe('Queue', function() {
   var client;
@@ -18,10 +20,23 @@ describe('Queue', function() {
   var message = { foo: 'bar' };
   var message_key = '123:abc';
   var spy;
-  var stub;
+  var time_stub;
   var queue;
+  var fs_stub;
+  var script_hash = {};
+  var script_content = {
+    send: 'this is the send.lua',
+    receive: 'this is the receive.lua',
+    finish: 'this is the finish.lua'
+  };
+  var md5;
+  var script_spy;
 
   beforeEach(function() {
+    sinon.log = function(message) {
+      console.log(message);
+    };
+
     client = {};
     util.inherits(client, require('redis').RedisClient);
     client.time = function() {};
@@ -30,18 +45,41 @@ describe('Queue', function() {
     client.llen = function() {};
     client.server_info = {redis_version: '2.3.0'};
 
-    spy = sinon.spy(client, 'evalsha');
+    spy = sinon.stub(client, 'evalsha');
+    script_spy = sinon.stub(client, 'script');
 
-    stub = sinon.stub(client, 'time', function(callback) {
+    time_stub = sinon.stub(client, 'time', function(callback) {
       callback(undefined, redis_time);
     });
 
-    queue = new Queue(client);
+    fs_stub = sinon.stub(fs, 'readFileSync');
+    fs_stub.withArgs('../lua/send_message.lua').returns(script_content.send);
+    fs_stub.withArgs('../lua/receive_message.lua').returns(script_content.receive);
+    fs_stub.withArgs('../lua/finish_message.lua').returns(script_content.finish);
+
+    md5 = crypto.createHash('md5');
+    md5.update(script_content.send, 'utf8');
+    script_hash.send = md5.digest('hex');
+
+    md5 = crypto.createHash('md5');
+    md5.update(script_content.receive, 'utf8');
+    script_hash.receive = md5.digest('hex');
+
+    md5 = crypto.createHash('md5');
+    md5.update(script_content.finish, 'utf8');
+    script_hash.finish = md5.digest('hex');
+
+    queue = new Queue(client, {
+      send_script_hash: script_hash.send,
+      receive_script_hash: script_hash.receive,
+      finish_script_hash: script_hash.finish
+    });
   });
 
   afterEach(function() {
     client.evalsha.restore();
     client.time.restore();
+    fs.readFileSync.restore();
   });
 
   describe('#ctor', function() {
@@ -67,39 +105,6 @@ describe('Queue', function() {
         expect(e).to.be.an(exceptions.ArgumentException);
       });
     });
-
-    it('stores the send_hash value from the options object in the script hash', function() {
-      // Arrange
-      var lua_hash = 'myhashvalue';
-
-      // Act
-      var queue = new Queue(client, {send_script_hash: lua_hash});
-
-      // Assert
-      expect(queue._scripts.send).to.equal(lua_hash);
-    });
-
-    it('stores the receive_hash value from the options object in the script hash', function() {
-      // Arrange
-      var lua_hash = 'myhashvalue';
-
-      // Act
-      var queue = new Queue(client, {receive_script_hash: lua_hash});
-
-      // Assert
-      expect(queue._scripts.receive).to.equal(lua_hash);
-    });
-
-    it('stores the receive_hash value from the options object in the script hash', function() {
-      // Arrange
-      var lua_hash = 'myhashvalue';
-
-      // Act
-      var queue = new Queue(client, {finish_script_hash: lua_hash});
-
-      // Assert
-      expect(queue._scripts.finish).to.equal(lua_hash);
-    });
   });
 
   describe('#submit', function() {
@@ -109,31 +114,30 @@ describe('Queue', function() {
       queue.submit(submit_queue, message_key, message);
 
       // Assert
-      expect(stub.calledOnce).to.be.ok();
+      expect(time_stub.calledOnce).to.be.ok();
     });
 
     it('calls evalsha once', function() {
       // Arrange
-      var lua_hash = 'abc123xyz',
-          submit_queue = 'queue:submitted',
+      var submit_queue = 'queue:submitted',
           message_key = 'message:id',
           message = {field: '123'},
           callback = function() {};
-      queue['_scripts'] = { send: lua_hash };
+
+      spy.yields();
+      script_spy.withArgs('load', script_hash.send).yields(undefined, script_hash.send);
 
       // Act
       queue.submit(submit_queue, message_key, message, callback);
 
       // Assert
-      expect(spy.calledWithExactly(lua_hash, 4, 'message:id', 'message:received', message_key, submit_queue, JSON.stringify(message), js_time, callback)).to.be.ok();
+      expect(spy.calledWithExactly(script_hash.send, 4, 'message:id', 'message:received', message_key, submit_queue, JSON.stringify(message), js_time, callback)).to.be.ok();
     });
 
     it('invokes the callback with an undefined error after a successful submission', function(done) {
       // Arrange
-      client.evalsha.restore();
-      var evalsha_stub = sinon.stub(client, 'evalsha');
-
-      evalsha_stub.yields();
+      spy.yields();
+      script_spy.withArgs('load', script_hash.send).yields(undefined, script_hash.send);
 
       // Act
       queue.submit(submit_queue, message_key, message, function(err, result) {
@@ -145,10 +149,8 @@ describe('Queue', function() {
 
     it('invokes the callback with the new message ID after a successful submission', function(done) {
       // Arrange
-      client.evalsha.restore();
-      var evalsha_stub = sinon.stub(client, 'evalsha');
-
-      evalsha_stub.yields(undefined, [1337]);
+      spy.yields(undefined, [1337]);
+      script_spy.withArgs('load', script_hash.send).yields(undefined, script_hash.send);
 
       // Act
       queue.submit(submit_queue, message_key, message, function(err, result) {
@@ -157,6 +159,49 @@ describe('Queue', function() {
         done();
       });
     });
+
+    it('loads the correct lua script', function(done) {
+      // Arrange
+      spy.yields();
+      script_spy.withArgs('load', script_hash.send).yields(undefined, script_hash.send);
+
+      // Act
+      queue.submit(submit_queue, message_key, message, function() {
+        // Assert
+        expect(script_spy.calledOnce).to.be.ok();
+        done();
+      });
+    });
+
+    it('loads the lua script before the first invocation', function(done) {
+      // Arrange
+      spy.yields();
+      script_spy.withArgs('load', script_hash.send).yields(undefined, script_hash.send);
+      fs_stub.withArgs('../lua/send_message.lua', 'utf8').returns(script_content.send);
+
+      // Act
+      queue.submit(submit_queue, message_key, message, function() {
+        // Assert
+        expect(script_spy.calledBefore(spy)).to.be.ok();
+        done();
+      });
+    });
+
+    it('passes the loaded lua script to evalsha', function(done) {
+      // Arrange
+      spy.yields();
+      script_spy.withArgs('load', script_hash.send).yields(undefined, script_hash.send);
+      fs_stub.withArgs('../lua/send_message.lua', 'utf8').returns(script_content.send);
+
+      // Act
+      queue.submit(submit_queue, message_key, message, function() {
+        // Assert
+        expect(spy.args[0][0] === script_hash.send).to.be.ok(); 
+        done();       
+      });
+    })
+
+    it('only loads the send_message.lua script once');
   });
 
   describe('#receive', function() {
@@ -166,7 +211,7 @@ describe('Queue', function() {
       queue.receive(submit_queue);
 
       // Assert
-      expect(stub.calledOnce).to.be.ok();
+      expect(time_stub.calledOnce).to.be.ok();
     });
 
     it('calls evalsha once', function() {
@@ -241,7 +286,7 @@ describe('Queue', function() {
       var err;
       var queue_length = 10;
       var queue_name = 'my_queue';
-      stub = sinon.stub(client, 'llen');
+      var stub = sinon.stub(client, 'llen');
       stub.withArgs(queue_name).yields(err, queue_length);
 
       // Act
@@ -256,7 +301,7 @@ describe('Queue', function() {
       // Arrange
       var err;
       var queue_name = 'my_queue';
-      stub = sinon.stub(client, 'llen');
+      var stub = sinon.stub(client, 'llen');
       stub.withArgs('my_queue2').yields(err, 10);
       stub.withArgs('my_queue').yields(err, 0);
 
@@ -271,7 +316,7 @@ describe('Queue', function() {
     it('accepts multiple queue name parameters and returns the length of each as an array', function(done) {
       // Arrange
       var err;
-      stub = sinon.stub(client, 'llen');
+      var stub = sinon.stub(client, 'llen');
       stub.withArgs('my_queue1').yields(err, 1);
       stub.withArgs('my_queue2').yields(err, 3);
       stub.withArgs('my_queue3').yields(err, 5);
