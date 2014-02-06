@@ -35,23 +35,22 @@ Queue.prototype.submit = function(queue_name, message_key, message, callback) {
       time,
       script,
       md5,
-      evalsha = function(err, result) {
-        self._client.evalsha(result, 4, 'message:id', 'message:received', message_key, queue_name, JSON.stringify(message), time, callback);
+      submitMessage = function() {
+        self._client.time(function(err, result) {
+          time = utils.redisTimeToJSDate(result);
+          self._client.evalsha(self._scripts.send, 4, 'message:id', 'message:received', message_key, queue_name, JSON.stringify(message), time, callback);
+        });
       };
 
-  self._client.time(function(err, result) {
-    time = utils.redisTimeToJSDate(result);
+  if (!self._scripts.send) {
+    script = fs.readFileSync('../lua/send_message.lua', 'utf8');
+    md5 = crypto.createHash('md5');
+    md5.update(script);
+    self._scripts.send = md5.digest('hex');
+    return self._client.script('load', self._scripts.send, submitMessage);
+  }
 
-    if (!self._scripts.send) {
-      script = fs.readFileSync('../lua/send_message.lua', 'utf8');
-      md5 = crypto.createHash('md5');
-      md5.update(script);
-      self._scripts.send = md5.digest('hex');
-      return self._client.script('load', self._scripts.send, evalsha);
-    }
-
-    evalsha(undefined, self._scripts.send);
-  });
+  submitMessage();
 };
 
 Queue.prototype.receive = function(submit_queue, receive_queue, callback) {

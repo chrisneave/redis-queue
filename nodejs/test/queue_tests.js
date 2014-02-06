@@ -69,11 +69,7 @@ describe('Queue', function() {
     md5.update(script_content.finish, 'utf8');
     script_hash.finish = md5.digest('hex');
 
-    queue = new Queue(client, {
-      send_script_hash: script_hash.send,
-      receive_script_hash: script_hash.receive,
-      finish_script_hash: script_hash.finish
-    });
+    queue = new Queue(client);
   });
 
   afterEach(function() {
@@ -108,13 +104,17 @@ describe('Queue', function() {
   });
 
   describe('#submit', function() {
-    it('issues the TIME command once', function() {
+    it('issues the TIME command once', function(done) {
       // Arrange
-      // Act
-      queue.submit(submit_queue, message_key, message);
+      spy.yields();
+      script_spy.withArgs('load', script_hash.send).yields(undefined, script_hash.send);
 
-      // Assert
-      expect(time_stub.calledOnce).to.be.ok();
+      // Act
+      queue.submit(submit_queue, message_key, message, function() {
+        // Assert
+        expect(time_stub.calledOnce).to.be.ok();
+        done();
+      });
     });
 
     it('calls evalsha once', function() {
