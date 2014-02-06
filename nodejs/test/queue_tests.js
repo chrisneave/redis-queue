@@ -201,7 +201,17 @@ describe('Queue', function() {
       });
     })
 
-    it('only loads the send_message.lua script once');
+    it('only loads the lua script once', function() {
+      // Arrange
+      var callback = function() {};
+
+      // Act
+      queue.submit(submit_queue, message_key, message, callback);
+      queue.submit(submit_queue, message_key, message, callback);
+
+      // Assert
+      expect(script_spy.calledOnce).to.be.ok();
+    });
   });
 
   describe('#receive', function() {
