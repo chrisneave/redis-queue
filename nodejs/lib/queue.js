@@ -24,7 +24,7 @@ var Queue = function(client) {
   var self = this;
 
   // TODO: Need a better method of determining whether client is a RedisClient.
-  if (!client.server_info || !client.server_info.redis_version) {
+  if (!client.server_info) {
     throw new exceptions.ArgumentException();
   }
 
@@ -40,8 +40,10 @@ var Queue = function(client) {
     script = fs.readFileSync(filename, 'utf8');
     md5 = crypto.createHash('md5');
     md5.update(script);
-    self._scripts[message_name] = md5.digest('hex');
-    return self._client.script('load', self._scripts[message_name], callback);
+    return self._client.script('load', script, function(err, result) {
+      self._scripts[message_name] = result;
+      callback();
+    });
   };
 
   var _getTime = function(callback) {
@@ -50,24 +52,24 @@ var Queue = function(client) {
     });
   };
 
-  this.receive = function(submit_queue, receive_queue, callback) {
-    _loadScript('receive', '../lua/receive_message.lua', function() {
-      _getTime(function(err, time) {
-        self._client.evalsha(self._scripts.receive, 2, submit_queue, receive_queue, time, callback);
-      });
-    });
-  };
-
   this.submit = function(queue_name, message_key, message, callback) {
-    _loadScript('send', '../lua/send_message.lua', function() {
+    _loadScript('send', __dirname + '/../lua/send_message.lua', function(err, result) {
       _getTime(function(err, time) {
         self._client.evalsha(self._scripts.send, 4, 'message:id', 'message:received', message_key, queue_name, JSON.stringify(message), time, callback);
       });
     });
   };
 
+  this.receive = function(submit_queue, receive_queue, callback) {
+    _loadScript('receive', __dirname + '/../lua/receive_message.lua', function() {
+      _getTime(function(err, time) {
+        self._client.evalsha(self._scripts.receive, 2, submit_queue, receive_queue, time, callback);
+      });
+    });
+  };
+
   this.finish = function(receive_queue, finish_queue, message_id, status, callback) {
-    _loadScript('finish', '../lua/finish_message.lua', function() {
+    _loadScript('finish', __dirname + '/../lua/process_message.lua', function() {
       _getTime(function(err, time) {
         self._client.evalsha(self._scripts.finish, 4, receive_queue, finish_queue, message_id, 'message:received', status, time, callback);
       });

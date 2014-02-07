@@ -31,11 +31,11 @@ describe('Queue', function() {
   };
   var md5;
   var script_spy;
-  var wrapTest = function(lua_file, lua_hash, function_under_test) {
+
+  var wrapTest = function(lua_content, lua_hash, function_under_test) {
     // Arrange
     spy.yields();
-    script_spy.withArgs('load', lua_hash).yields(undefined, lua_hash);
-    fs_stub.withArgs('../lua/receive_message.lua', 'utf8').returns(script_content.receive);
+    script_spy.withArgs('load', lua_content).yields(undefined, lua_hash);
 
     // Act
     function_under_test();
@@ -62,9 +62,9 @@ describe('Queue', function() {
     });
 
     fs_stub = sinon.stub(fs, 'readFileSync');
-    fs_stub.withArgs('../lua/send_message.lua').returns(script_content.send);
-    fs_stub.withArgs('../lua/receive_message.lua').returns(script_content.receive);
-    fs_stub.withArgs('../lua/finish_message.lua').returns(script_content.finish);
+    fs_stub.withArgs('/Users/chris/dev/redis-queue/nodejs/lib/../lua/send_message.lua', 'utf8').returns(script_content.send);
+    fs_stub.withArgs('/Users/chris/dev/redis-queue/nodejs/lib/../lua/receive_message.lua', 'utf8').returns(script_content.receive);
+    fs_stub.withArgs('/Users/chris/dev/redis-queue/nodejs/lib/../lua/process_message.lua', 'utf8').returns(script_content.finish);
 
     md5 = crypto.createHash('md5');
     md5.update(script_content.send, 'utf8');
@@ -116,7 +116,7 @@ describe('Queue', function() {
     it('issues the TIME command once', function(done) {
       // Arrange
       spy.yields();
-      script_spy.withArgs('load', script_hash.send).yields(undefined, script_hash.send);
+      script_spy.withArgs('load', script_content.send).yields(undefined, script_hash.send);
 
       // Act
       queue.submit(submit_queue, message_key, message, function() {
@@ -134,7 +134,7 @@ describe('Queue', function() {
           callback = function() {};
 
       spy.yields();
-      script_spy.withArgs('load', script_hash.send).yields(undefined, script_hash.send);
+      script_spy.withArgs('load', script_content.send).yields(undefined, script_hash.send);
 
       // Act
       queue.submit(submit_queue, message_key, message, callback);
@@ -144,7 +144,7 @@ describe('Queue', function() {
     });
 
     it('invokes the callback with an undefined error after a successful submission', function(done) {
-      wrapTest('../lua/send_message.lua', script_hash.send, function() {
+      wrapTest(script_content.send, script_hash.send, function() {
         // Act
         queue.submit(submit_queue, message_key, message, function(err, result) {
           // Assert
@@ -157,7 +157,7 @@ describe('Queue', function() {
     it('invokes the callback with the new message ID after a successful submission', function(done) {
       // Arrange
       spy.yields(undefined, [1337]);
-      script_spy.withArgs('load', script_hash.send).yields(undefined, script_hash.send);
+      script_spy.withArgs('load', script_content.send).yields(undefined, script_hash.send);
 
       // Act
       queue.submit(submit_queue, message_key, message, function(err, result) {
@@ -168,7 +168,7 @@ describe('Queue', function() {
     });
 
     it('loads the correct lua script', function(done) {
-      wrapTest('../lua/send_message.lua', script_hash.send, function() {
+      wrapTest(script_content.send, script_hash.send, function() {
         // Act
         queue.submit(submit_queue, message_key, message, function() {
           // Assert
@@ -179,7 +179,7 @@ describe('Queue', function() {
     });
 
     it('loads the lua script before the first invocation', function(done) {
-      wrapTest('../lua/send_message.lua', script_hash.send, function() {
+      wrapTest(script_content.send, script_hash.send, function() {
         // Act
         queue.submit(submit_queue, message_key, message, function() {
           // Assert
@@ -190,7 +190,7 @@ describe('Queue', function() {
     });
 
     it('passes the loaded lua script to evalsha', function(done) {
-      wrapTest('../lua/send_message.lua', script_hash.send, function() {
+      wrapTest(script_content.send, script_hash.send, function() {
         // Act
         queue.submit(submit_queue, message_key, message, function() {
           // Assert
@@ -200,16 +200,19 @@ describe('Queue', function() {
       });
     });
 
-    it('only loads the lua script once', function() {
+    it('only loads the lua script once', function(done) {
       // Arrange
-      var callback = function() {};
+      spy.yields(undefined, [1337]);
+      script_spy.withArgs('load', script_content.send).yields(undefined, script_hash.send);
 
       // Act
-      queue.submit(submit_queue, message_key, message, callback);
-      queue.submit(submit_queue, message_key, message, callback);
-
-      // Assert
-      expect(script_spy.calledOnce).to.be.ok();
+      queue.submit(submit_queue, message_key, message, function() {
+        queue.submit(submit_queue, message_key, message, function() {
+          // Assert
+          expect(script_spy.calledOnce).to.be.ok();
+          done();
+        });
+      });
     });
   });
 
@@ -217,7 +220,7 @@ describe('Queue', function() {
     it('issues the TIME command once', function(done) {
       // Arrange
       spy.yields();
-      script_spy.withArgs('load', script_hash.receive).yields(undefined, script_hash.receive);
+      script_spy.withArgs('load', script_content.receive).yields(undefined, script_hash.receive);
 
       // Act
       queue.receive(submit_queue, function() {
@@ -234,7 +237,7 @@ describe('Queue', function() {
           callback = function() {};
 
       spy.yields();
-      script_spy.withArgs('load', script_hash.receive).yields(undefined, script_hash.receive);
+      script_spy.withArgs('load', script_content.receive).yields(undefined, script_hash.receive);
 
       // Act
       queue.receive(submit_queue, receive_queue, callback);
@@ -244,7 +247,7 @@ describe('Queue', function() {
     });
 
     it('invokes the callback with an undefined error after a successfully receiving a message', function(done) {
-      wrapTest('../lua/receive_message.lua', script_hash.receive, function() {
+      wrapTest(script_content.receive, script_hash.receive, function() {
         // Act
         queue.receive(submit_queue, receive_queue, function(err, result) {
           // Assert
@@ -257,7 +260,7 @@ describe('Queue', function() {
     it('invokes the callback with the message received from the submit queue', function(done) {
       // Arrange
       spy.yields(undefined, message);
-      script_spy.withArgs('load', script_hash.receive).yields(undefined, script_hash.receive);
+      script_spy.withArgs('load', script_content.receive).yields(undefined, script_hash.receive);
 
       // Act
       queue.receive(submit_queue, receive_queue, function(err, result) {
@@ -268,7 +271,7 @@ describe('Queue', function() {
     });
 
     it('loads the correct lua script', function(done) {
-      wrapTest('../lua/receive_message.lua', script_hash.receive, function() {
+      wrapTest(script_content.receive, script_hash.receive, function() {
         // Act
         queue.receive(submit_queue, receive_queue, function() {
           // Assert
@@ -279,7 +282,7 @@ describe('Queue', function() {
     });
 
     it('loads the lua script before the first invocation', function(done) {
-      wrapTest('../lua/receive_message.lua', script_hash.receive, function() {
+      wrapTest(script_content.receive, script_hash.receive, function() {
         // Act
         queue.receive(submit_queue, receive_queue, function() {
           // Assert
@@ -290,7 +293,7 @@ describe('Queue', function() {
     });
 
     it('passes the loaded lua script to evalsha', function(done) {
-      wrapTest('../lua/receive_message.lua', script_hash.receive, function() {
+      wrapTest(script_content.receive, script_hash.receive, function() {
         // Act
         queue.receive(submit_queue, receive_queue, function() {
           // Assert
@@ -300,16 +303,19 @@ describe('Queue', function() {
       });
     });
 
-    it('only loads the lua script once', function() {
+    it('only loads the lua script once', function(done) {
       // Arrange
-      var callback = function() {};
+      spy.yields(undefined, [1337]);
+      script_spy.withArgs('load', script_content.receive).yields(undefined, script_hash.receive);
 
       // Act
-      queue.receive(submit_queue, receive_queue, callback);
-      queue.receive(submit_queue, receive_queue, callback);
-
-      // Assert
-      expect(script_spy.calledOnce).to.be.ok();
+      queue.receive(submit_queue, receive_queue, function() {
+        queue.receive(submit_queue, receive_queue, function() {
+          // Assert
+          expect(script_spy.calledOnce).to.be.ok();
+          done();
+        });
+      });
     });
   });
 
@@ -324,7 +330,7 @@ describe('Queue', function() {
           callback = function() {};
 
       spy.yields();
-      script_spy.withArgs('load', script_hash.finish).yields(undefined, script_hash.finish);
+      script_spy.withArgs('load', script_content.finish).yields(undefined, script_hash.finish);
 
       // Act
       queue.finish(receive_queue, finish_queue, message_id, status, callback);

@@ -10,6 +10,8 @@ var finished_with_error_queue = 'queue:finished_with_error';
 var Queue = require(__dirname + '/../../lib/queue');
 var program = require('commander');
 
+var queue = new Queue(client);
+
 program
   .usage('send|receive|finish [options]')
   .option('-m, --messages <m>', 'the number of messages to send', parseInt)
@@ -23,16 +25,7 @@ var handleError = function(err) {
   throw err;
 };
 
-function loadScript(filename, done) {
-  var lua = fs.readFileSync(filename, 'utf8');
-  client.script('load', lua, function(err, result) {
-    done(err, result);
-  });
-}
-
 function dumpQueueStats(callback) {
-  var queue = new Queue(client);
-
   queue.getQueueLength([submit_queue, receive_queue, finished_ok_queue, finished_with_error_queue], function(err, result) {
     console.log('Submit queue length = %d', result[0]);
     console.log('Receive queue length = %d', result[1]);
@@ -76,8 +69,6 @@ function sendLoop(lua_hash, send_function) {
 }
 
 function sendMessageWithLua(lua_hash, message) {
-  var queue = new Queue(client, {send_script_hash: lua_hash});
-
   queue.submit(submit_queue, message.job_code + "." + message.job_type, message.body, function(err, result) {
     if (err) { handleError(err); }
     if (!result) { return process.exit(); }
@@ -88,8 +79,6 @@ function sendMessageWithLua(lua_hash, message) {
 }
 
 var receiveMessageWithLua = function(lua_hash) {
-  var queue = new Queue(client, {receive_script_hash: lua_hash});
-
   queue.receive(submit_queue, receive_queue, function(err, result) {
     if (err) { handleError(err); }
     if (!result) {
@@ -105,8 +94,7 @@ function processMessagesWithLua(lua_hash, message_id, finished_ok) {
   if (finished_ok === undefined) { finished_ok = true; }
 
   var finish_queue = (finished_ok) ? finished_ok_queue : finished_with_error_queue,
-      status = (finished_ok) ? 'finished ok' : 'finished with error',
-      queue = new Queue(client, {finish_script_hash: lua_hash});
+      status = (finished_ok) ? 'finished ok' : 'finished with error';
 
   queue.finish(receive_queue, finish_queue, message_id, status, function(err, result) {
     if (err) { handleError(err); }
@@ -118,39 +106,30 @@ function processMessagesWithLua(lua_hash, message_id, finished_ok) {
   });
 }
 
-var run = function(message, lua_script, exec_function) {
+var run = function(message, exec_function) {
   console.log(message);
   client.script('flush', function() {
-    loadScript(lua_script, function(err, result) {
-      if (err) { return console.error(err); }
-      started = new Date();
-      exec_function(result);
-    });
+    started = new Date();
+    exec_function();
   });
 };
 
 switch(process.argv[2]) {
   case 'send':
     client.flushdb();
-
     iterations = program.messages || 1000;
 
-    run(util.format('Sending %d messages using Lua script', iterations),
-      __dirname + '/../../lua/send_message.lua', function(result) {
-        sendLoop(result, sendMessageWithLua)
-      });
+    run(util.format('Sending %d messages using Lua script', iterations), function(result) {
+      sendLoop(result, sendMessageWithLua);
+    });
     break;
 
   case 'receive':
-    run('Receiving messages using Lua script',
-      __dirname + '/../../lua/receive_message.lua',
-      receiveMessageWithLua)
+    run('Receiving messages using Lua script', receiveMessageWithLua);
     break;
 
   case 'finish':
-    run('Finishing messages using Lua script',
-      __dirname + '/../../lua/process_message.lua',
-      processMessagesWithLua)
+    run('Finishing messages using Lua script', processMessagesWithLua);
     break;
 
   default:
