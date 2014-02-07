@@ -39,7 +39,7 @@ describe('Queue', function() {
 
     // Act
     function_under_test();
-  }
+  };
 
   beforeEach(function() {
     sinon.log = function(message) {
@@ -298,7 +298,7 @@ describe('Queue', function() {
           done();
         });
       });
-    })
+    });
 
     it('only loads the lua script once', function() {
       // Arrange

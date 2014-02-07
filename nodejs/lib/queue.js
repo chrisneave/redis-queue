@@ -20,7 +20,7 @@ var crypto = require('crypto');
 var utils = require(__dirname + '/utils');
 var exceptions = require(__dirname + '/exceptions');
 
-var Queue = function(client, options) {
+var Queue = function(client) {
   var self = this;
 
   // TODO: Need a better method of determining whether client is a RedisClient.
@@ -44,34 +44,31 @@ var Queue = function(client, options) {
     return self._client.script('load', self._scripts[message_name], callback);
   };
 
-  this.receive = function(submit_queue, receive_queue, callback) {
-    var time;
+  var _getTime = function(callback) {
+    self._client.time(function(err, result) {
+      callback(err, utils.redisTimeToJSDate(result));
+    });
+  };
 
+  this.receive = function(submit_queue, receive_queue, callback) {
     _loadScript('receive', '../lua/receive_message.lua', function() {
-      self._client.time(function(err, result) {
-        time = utils.redisTimeToJSDate(result);
+      _getTime(function(err, time) {
         self._client.evalsha(self._scripts.receive, 2, submit_queue, receive_queue, time, callback);
       });
     });
   };
 
   this.submit = function(queue_name, message_key, message, callback) {
-    var time;
-
     _loadScript('send', '../lua/send_message.lua', function() {
-      self._client.time(function(err, result) {
-        time = utils.redisTimeToJSDate(result);
+      _getTime(function(err, time) {
         self._client.evalsha(self._scripts.send, 4, 'message:id', 'message:received', message_key, queue_name, JSON.stringify(message), time, callback);
       });
     });
   };
 
   this.finish = function(receive_queue, finish_queue, message_id, status, callback) {
-    var time;
-
     _loadScript('finish', '../lua/finish_message.lua', function() {
-      self._client.time(function(err, result) {
-        time = utils.redisTimeToJSDate(result);
+      _getTime(function(err, time) {
         self._client.evalsha(self._scripts.finish, 4, receive_queue, finish_queue, message_id, 'message:received', status, time, callback);
       });
     });
@@ -79,8 +76,9 @@ var Queue = function(client, options) {
 
   this.getQueueLength = function(queue_names, callback, results) {
     var err,
-        results = results || [],
         item;
+
+    results = results || [];
 
     // Coerce non-array arguments into a single element Array.
     if (Object.prototype.toString.call(queue_names) !== '[object Array]') {
