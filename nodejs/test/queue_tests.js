@@ -31,6 +31,15 @@ describe('Queue', function() {
   };
   var md5;
   var script_spy;
+  var wrapTest = function(lua_file, lua_hash, function_under_test) {
+    // Arrange
+    spy.yields();
+    script_spy.withArgs('load', lua_hash).yields(undefined, lua_hash);
+    fs_stub.withArgs('../lua/receive_message.lua', 'utf8').returns(script_content.receive);
+
+    // Act
+    function_under_test();
+  }
 
   beforeEach(function() {
     sinon.log = function(message) {
@@ -135,15 +144,13 @@ describe('Queue', function() {
     });
 
     it('invokes the callback with an undefined error after a successful submission', function(done) {
-      // Arrange
-      spy.yields();
-      script_spy.withArgs('load', script_hash.send).yields(undefined, script_hash.send);
-
-      // Act
-      queue.submit(submit_queue, message_key, message, function(err, result) {
-        // Assert
-        expect(err).not.to.be.ok();
-        done();
+      wrapTest('../lua/send_message.lua', script_hash.send, function() {
+        // Act
+        queue.submit(submit_queue, message_key, message, function(err, result) {
+          // Assert
+          expect(err).not.to.be.ok();
+          done();
+        });
       });
     });
 
@@ -161,45 +168,37 @@ describe('Queue', function() {
     });
 
     it('loads the correct lua script', function(done) {
-      // Arrange
-      spy.yields();
-      script_spy.withArgs('load', script_hash.send).yields(undefined, script_hash.send);
-
-      // Act
-      queue.submit(submit_queue, message_key, message, function() {
-        // Assert
-        expect(script_spy.calledOnce).to.be.ok();
-        done();
+      wrapTest('../lua/send_message.lua', script_hash.send, function() {
+        // Act
+        queue.submit(submit_queue, message_key, message, function() {
+          // Assert
+          expect(script_spy.calledOnce).to.be.ok();
+          done();
+        });
       });
     });
 
     it('loads the lua script before the first invocation', function(done) {
-      // Arrange
-      spy.yields();
-      script_spy.withArgs('load', script_hash.send).yields(undefined, script_hash.send);
-      fs_stub.withArgs('../lua/send_message.lua', 'utf8').returns(script_content.send);
-
-      // Act
-      queue.submit(submit_queue, message_key, message, function() {
-        // Assert
-        expect(script_spy.calledBefore(spy)).to.be.ok();
-        done();
+      wrapTest('../lua/send_message.lua', script_hash.send, function() {
+        // Act
+        queue.submit(submit_queue, message_key, message, function() {
+          // Assert
+          expect(script_spy.calledBefore(spy)).to.be.ok();
+          done();
+        });
       });
     });
 
     it('passes the loaded lua script to evalsha', function(done) {
-      // Arrange
-      spy.yields();
-      script_spy.withArgs('load', script_hash.send).yields(undefined, script_hash.send);
-      fs_stub.withArgs('../lua/send_message.lua', 'utf8').returns(script_content.send);
-
-      // Act
-      queue.submit(submit_queue, message_key, message, function() {
-        // Assert
-        expect(spy.args[0][0] === script_hash.send).to.be.ok(); 
-        done();       
+      wrapTest('../lua/send_message.lua', script_hash.send, function() {
+        // Act
+        queue.submit(submit_queue, message_key, message, function() {
+          // Assert
+          expect(spy.args[0][0] === script_hash.send).to.be.ok();
+          done();
+        });
       });
-    })
+    });
 
     it('only loads the lua script once', function() {
       // Arrange
@@ -215,51 +214,50 @@ describe('Queue', function() {
   });
 
   describe('#receive', function() {
-    it('issues the TIME command once', function() {
+    it('issues the TIME command once', function(done) {
       // Arrange
-      // Act
-      queue.receive(submit_queue);
+      spy.yields();
+      script_spy.withArgs('load', script_hash.receive).yields(undefined, script_hash.receive);
 
-      // Assert
-      expect(time_stub.calledOnce).to.be.ok();
+      // Act
+      queue.receive(submit_queue, function() {
+        // Assert
+        expect(time_stub.calledOnce).to.be.ok();
+        done();
+      });
     });
 
     it('calls evalsha once', function() {
       // Arrange
-      var lua_hash = 'abc123xyz',
-          submit_queue = 'queue:submitted',
+      var submit_queue = 'queue:submitted',
           receive_queue = 'queue:received',
           callback = function() {};
-      queue['_scripts'] = { receive: lua_hash };
+
+      spy.yields();
+      script_spy.withArgs('load', script_hash.receive).yields(undefined, script_hash.receive);
 
       // Act
       queue.receive(submit_queue, receive_queue, callback);
 
       // Assert
-      expect(spy.calledWithExactly(lua_hash, 2, submit_queue, receive_queue, js_time, callback)).to.be.ok();
+      expect(spy.calledWithExactly(script_hash.receive, 2, submit_queue, receive_queue, js_time, callback)).to.be.ok();
     });
 
     it('invokes the callback with an undefined error after a successfully receiving a message', function(done) {
-      // Arrange
-      client.evalsha.restore();
-      var evalsha_stub = sinon.stub(client, 'evalsha');
-
-      evalsha_stub.yields();
-
-      // Act
-      queue.receive(submit_queue, receive_queue, function(err, result) {
-        // Assert
-        expect(err).not.to.be.ok();
-        done();
+      wrapTest('../lua/receive_message.lua', script_hash.receive, function() {
+        // Act
+        queue.receive(submit_queue, receive_queue, function(err, result) {
+          // Assert
+          expect(err).not.to.be.ok();
+          done();
+        });
       });
     });
 
     it('invokes the callback with the message received from the submit queue', function(done) {
       // Arrange
-      client.evalsha.restore();
-      var evalsha_stub = sinon.stub(client, 'evalsha');
-
-      evalsha_stub.yields(undefined, message);
+      spy.yields(undefined, message);
+      script_spy.withArgs('load', script_hash.receive).yields(undefined, script_hash.receive);
 
       // Act
       queue.receive(submit_queue, receive_queue, function(err, result) {
@@ -268,25 +266,71 @@ describe('Queue', function() {
         done();
       });
     });
+
+    it('loads the correct lua script', function(done) {
+      wrapTest('../lua/receive_message.lua', script_hash.receive, function() {
+        // Act
+        queue.receive(submit_queue, receive_queue, function() {
+          // Assert
+          expect(script_spy.calledOnce).to.be.ok();
+          done();
+        });
+      });
+    });
+
+    it('loads the lua script before the first invocation', function(done) {
+      wrapTest('../lua/receive_message.lua', script_hash.receive, function() {
+        // Act
+        queue.receive(submit_queue, receive_queue, function() {
+          // Assert
+          expect(script_spy.calledBefore(spy)).to.be.ok();
+          done();
+        });
+      });
+    });
+
+    it('passes the loaded lua script to evalsha', function(done) {
+      wrapTest('../lua/receive_message.lua', script_hash.receive, function() {
+        // Act
+        queue.receive(submit_queue, receive_queue, function() {
+          // Assert
+          expect(spy.args[0][0] === script_hash.receive).to.be.ok();
+          done();
+        });
+      });
+    })
+
+    it('only loads the lua script once', function() {
+      // Arrange
+      var callback = function() {};
+
+      // Act
+      queue.receive(submit_queue, receive_queue, callback);
+      queue.receive(submit_queue, receive_queue, callback);
+
+      // Assert
+      expect(script_spy.calledOnce).to.be.ok();
+    });
   });
 
   describe('#finish', function() {
     it('issues the TIME command once');
     it('calls evalsha once', function() {
       // Arrange
-      var lua_hash = 'abc123xyz',
-          receive_queue = 'queue:receive',
+      var receive_queue = 'queue:receive',
           finish_queue = 'queue:finished_ok',
           message_id = 'message_id:123',
           status = 'finished ok',
           callback = function() {};
-      queue['_scripts'] = { finish: lua_hash };
+
+      spy.yields();
+      script_spy.withArgs('load', script_hash.finish).yields(undefined, script_hash.finish);
 
       // Act
       queue.finish(receive_queue, finish_queue, message_id, status, callback);
 
       // Assert
-      expect(spy.calledWithExactly(lua_hash, 4, receive_queue, finish_queue, message_id, 'message:received', status, js_time, callback)).to.be.ok();
+      expect(spy.calledWithExactly(script_hash.finish, 4, receive_queue, finish_queue, message_id, 'message:received', status, js_time, callback)).to.be.ok();
     });
   });
 
