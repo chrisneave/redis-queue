@@ -1,4 +1,3 @@
-var fs = require('fs');
 var util = require('util');
 var redis = require('redis');
 var client = redis.createClient('6379', '192.168.33.12');
@@ -108,28 +107,35 @@ function processMessagesWithLua(lua_hash, message_id, finished_ok) {
 
 var run = function(message, exec_function) {
   console.log(message);
-  client.script('flush', function() {
-    started = new Date();
-    exec_function();
-  });
+  started = new Date();
+  exec_function();
 };
+
+client.script('flush');
 
 switch(process.argv[2]) {
   case 'send':
     client.flushdb();
     iterations = program.messages || 1000;
 
-    run(util.format('Sending %d messages using Lua script', iterations), function(result) {
-      sendLoop(result, sendMessageWithLua);
+
+    queue.init(function() {
+      run(util.format('Sending %d messages using Lua script', iterations), function(result) {
+        sendLoop(result, sendMessageWithLua);
+      });
     });
     break;
 
   case 'receive':
-    run('Receiving messages using Lua script', receiveMessageWithLua);
+    queue.init(function() {
+      run('Receiving messages using Lua script', receiveMessageWithLua);
+    });
     break;
 
   case 'finish':
-    run('Finishing messages using Lua script', processMessagesWithLua);
+    queue.init(function() {
+      run('Finishing messages using Lua script', processMessagesWithLua);
+    });
     break;
 
   default:
