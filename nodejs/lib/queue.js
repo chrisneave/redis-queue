@@ -34,6 +34,7 @@ var Queue = function(client) {
     receive: { hash: '', filename: __dirname + '/../lua/receive_message.lua' },
     finish: { hash: '', filename: __dirname + '/../lua/process_message.lua' }
   };
+  this._listeners = [];
 
   var _loadScript = function(message_name, callback) {
     var script,
@@ -62,6 +63,30 @@ var Queue = function(client) {
     });
   };
 
+  var _internalReceive = function(submit_queue, receive_queue, message_id, callback) {
+    _loadScriptAndGetTime('receive', function(err, time) {
+      self._client.evalsha(self._scripts.receive.hash, 3, submit_queue, receive_queue, message_id, time, function(err, result) {
+        callback(err, _deserializeMessage(result));
+      });
+    });
+  };
+
+  var _deserializeMessage = function(message_array) {
+    var json;
+
+    if (message_array) {
+      json = {};
+      json[message_array[0]] = message_array[1];
+      json[message_array[2]] = message_array[3];
+      json[message_array[4]] = message_array[5];
+      json[message_array[6]] = message_array[7];
+      json[message_array[8]] = message_array[9];
+      json[message_array[10]] = message_array[11];
+    }
+
+    return json;
+  };
+
   this.init = function(next) {
     _loadScript('send', function() {
       _loadScript('receive', function() {
@@ -77,9 +102,7 @@ var Queue = function(client) {
   };
 
   this.receive = function(submit_queue, receive_queue, callback) {
-    _loadScriptAndGetTime('receive', function(err, time) {
-      self._client.evalsha(self._scripts.receive.hash, 2, submit_queue, receive_queue, time, callback);
-    });
+    _internalReceive(submit_queue, receive_queue, undefined, callback);
   };
 
   this.finish = function(receive_queue, finish_queue, message_id, status, callback) {
@@ -121,6 +144,46 @@ var Queue = function(client) {
       results.push(result);
       self.getQueueLength(queue_names, callback, results);
     });
+  };
+
+  var _notifyListeners = function(err, result) {
+    for (var i = 0; i < self._listeners.length; i++) {
+      self._listeners[i](err, result);
+    }
+  };
+
+  var _doListen = function(submit_queue, receive_queue) {
+    var queue_length = 0;
+
+    self.getQueueLength(submit_queue, function(err, result) {
+      queue_length = result;
+
+      while (queue_length > 0 && self._listeners.length > 0) {
+        self.receive(submit_queue, receive_queue, _notifyListeners);
+        queue_length--;
+      }
+
+      self._client.brpoplpush(submit_queue, receive_queue, 1, function(err, result) {
+        _internalReceive(submit_queue, receive_queue, result, _notifyListeners);
+
+        // Invoke the method again while there are still listeners to notify.
+        if (self._listeners.length > 0) {
+          process.nextTick(function() {
+            _doListen(submit_queue, receive_queue);
+          });
+        }
+      });
+    });
+  };
+
+  this.listen = function(submit_queue, receive_queue, callback) {
+    self._listeners.push(callback);
+
+    if (self._listeners.length === 1) {
+      process.nextTick(function() {
+        _doListen(submit_queue, receive_queue);
+      });
+    }
   };
 };
 
