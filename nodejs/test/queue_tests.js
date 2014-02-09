@@ -282,7 +282,7 @@ describe('Queue', function() {
           done();
         });
       });
-    })
+    });
   });
 
   describe('#finish', function() {
