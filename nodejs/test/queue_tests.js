@@ -170,27 +170,29 @@ describe('Queue', function() {
       expect(spy.calledWithExactly(script_hash.send, 4, 'message:id', 'message:received', message_key, submit_queue, JSON.stringify(message), js_time, callback)).to.be.ok();
     });
 
-    it('invokes the callback with an undefined error after a successful submission', function(done) {
-      // Arrange
-      spy.yields();
+    describe('the message is sent successfully', function() {
+      it('invokes the callback with an undefined error after a successful submission', function(done) {
+        // Arrange
+        spy.yields();
 
-      // Act
-      queue.submit(submit_queue, message_key, message, function(err, result) {
-        // Assert
-        expect(err).not.to.be.ok();
-        done();
+        // Act
+        queue.submit(submit_queue, message_key, message, function(err, result) {
+          // Assert
+          expect(err).not.to.be.ok();
+          done();
+        });
       });
-    });
 
-    it('invokes the callback with the new message ID after a successful submission', function(done) {
-      // Arrange
-      spy.yields(undefined, [1337]);
+      it('invokes the callback with the new message ID after a successful submission', function(done) {
+        // Arrange
+        spy.yields(undefined, [1337]);
 
-      // Act
-      queue.submit(submit_queue, message_key, message, function(err, result) {
-        // Assert
-        expect(result[0]).to.equal(1337);
-        done();
+        // Act
+        queue.submit(submit_queue, message_key, message, function(err, result) {
+          // Assert
+          expect(result[0]).to.equal(1337);
+          done();
+        });
       });
     });
   });
@@ -256,29 +258,31 @@ describe('Queue', function() {
       expect(script_spy.called).not.to.be.ok();
     });
 
-    it('invokes the callback with an undefined error after a successfully receiving a message', function(done) {
-      // Arrange
-      spy.yields();
+    describe('the message is received successfully', function() {
+      it('invokes the callback with an undefined error after a successfully receiving a message', function(done) {
+        // Arrange
+        spy.yields();
 
-      // Act
-      queue.receive(submit_queue, receive_queue, function(err, result) {
-        // Assert
-        expect(err).not.to.be.ok();
-        done();
+        // Act
+        queue.receive(submit_queue, receive_queue, function(err, result) {
+          // Assert
+          expect(err).not.to.be.ok();
+          done();
+        });
       });
-    });
 
-    it('invokes the callback with the message received from the submit queue', function(done) {
-      // Arrange
-      spy.yields(undefined, message);
+      it('invokes the callback with the message received from the submit queue', function(done) {
+        // Arrange
+        spy.yields(undefined, message);
 
-      // Act
-      queue.receive(submit_queue, receive_queue, function(err, result) {
-        // Assert
-        expect(result).to.equal(message);
-        done();
+        // Act
+        queue.receive(submit_queue, receive_queue, function(err, result) {
+          // Assert
+          expect(result).to.equal(message);
+          done();
+        });
       });
-    });
+    })
   });
 
   describe('#finish', function() {
