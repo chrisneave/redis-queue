@@ -427,6 +427,16 @@ describe('Queue', function() {
       });
     });
 
-    it('loads each script once');
+    it('loads each script once', function(done) {
+      // Arrange
+      // Act
+      queue.init(function() {
+        queue.init(function() {
+          // Assert
+          expect(script_spy.withArgs('load', script_content.send).calledOnce).to.be.ok();
+          done();
+        });
+      });
+    });
   });
 });
