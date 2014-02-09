@@ -30,18 +30,9 @@ var Queue = function(client) {
 
   this._client = client;
   this._scripts = {
-    send: {
-      hash: '',
-      filename: __dirname + '/../lua/send_message.lua'
-    },
-    receive: {
-      hash: '',
-      filename: __dirname + '/../lua/receive_message.lua'
-    },
-    finish: {
-      hash: '',
-      filename: __dirname + '/../lua/process_message.lua'
-    }
+    send: { hash: '', filename: __dirname + '/../lua/send_message.lua' },
+    receive: { hash: '', filename: __dirname + '/../lua/receive_message.lua' },
+    finish: { hash: '', filename: __dirname + '/../lua/process_message.lua' }
   };
 
   var _loadScript = function(message_name, callback) {
@@ -53,7 +44,7 @@ var Queue = function(client) {
     script = fs.readFileSync(self._scripts[message_name].filename, 'utf8');
     md5 = crypto.createHash('md5');
     md5.update(script);
-    return self._client.script('load', script, function(err, result) {
+    self._client.script('load', script, function(err, result) {
       self._scripts[message_name].hash = result;
       callback();
     });
@@ -62,6 +53,12 @@ var Queue = function(client) {
   var _getTime = function(callback) {
     self._client.time(function(err, result) {
       callback(err, utils.redisTimeToJSDate(result));
+    });
+  };
+
+  var _loadScriptAndGetTime = function(script_action, next) {
+    _loadScript(script_action, function() {
+      _getTime(next);
     });
   };
 
@@ -74,45 +71,21 @@ var Queue = function(client) {
   };
 
   this.submit = function(queue_name, message_key, message, callback) {
-    var func = function() {
-      _getTime(function(err, time) {
-        self._client.evalsha(self._scripts.send.hash, 4, 'message:id', 'message:received', message_key, queue_name, JSON.stringify(message), time, callback);
-      });
-    };
-
-    if (!self._scripts.send.hash) {
-      _loadScript('send', func);
-    } else {
-      func();
-    }
+    _loadScriptAndGetTime('send', function(err, time) {
+      self._client.evalsha(self._scripts.send.hash, 4, 'message:id', 'message:received', message_key, queue_name, JSON.stringify(message), time, callback);
+    });
   };
 
   this.receive = function(submit_queue, receive_queue, callback) {
-    var func = function() {
-      _getTime(function(err, time) {
-        self._client.evalsha(self._scripts.receive.hash, 2, submit_queue, receive_queue, time, callback);
-      });
-    };
-
-    if (!self._scripts.receive.hash) {
-      _loadScript('receive', func);
-    } else {
-      func();
-    }
+    _loadScriptAndGetTime('receive', function(err, time) {
+      self._client.evalsha(self._scripts.receive.hash, 2, submit_queue, receive_queue, time, callback);
+    });
   };
 
   this.finish = function(receive_queue, finish_queue, message_id, status, callback) {
-    var func = function() {
-      _getTime(function(err, time) {
-        self._client.evalsha(self._scripts.finish.hash, 4, receive_queue, finish_queue, message_id, 'message:received', status, time, callback);
-      });
-    };
-
-    if (!self._scripts.finish.hash) {
-      _loadScript('finish', func);
-    } else {
-      func();
-    }
+    _loadScriptAndGetTime('finish', function(err, time) {
+      self._client.evalsha(self._scripts.finish.hash, 4, receive_queue, finish_queue, message_id, 'message:received', status, time, callback);
+    });
   };
 
   this.getQueueLength = function(queue_names, callback, results) {
