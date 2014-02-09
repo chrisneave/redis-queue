@@ -144,7 +144,7 @@ describe('Queue', function() {
           callback = function() {};
 
       spy.yields();
-      queue._scripts.send = script_hash.send;
+      queue._scripts.send.hash = script_hash.send;
 
       // Act
       queue.submit(submit_queue, message_key, message, callback);
@@ -161,7 +161,7 @@ describe('Queue', function() {
           callback = function() {};
 
       spy.yields();
-      queue._scripts.send = script_hash.send;
+      queue._scripts.send.hash = script_hash.send;
 
       // Act
       queue.submit(submit_queue, message_key, message, callback);
@@ -233,7 +233,7 @@ describe('Queue', function() {
           callback = function() {};
 
       spy.yields();
-      queue._scripts.receive = script_hash.receive;
+      queue._scripts.receive.hash = script_hash.receive;
 
       // Act
       queue.receive(submit_queue, receive_queue, callback);
@@ -249,7 +249,7 @@ describe('Queue', function() {
           callback = function() {};
 
       spy.yields();
-      queue._scripts.receive = script_hash.receive;
+      queue._scripts.receive.hash = script_hash.receive;
 
       // Act
       queue.receive(submit_queue, receive_queue, callback);
@@ -321,7 +321,7 @@ describe('Queue', function() {
       var callback = function() {};
 
       spy.yields();
-      queue._scripts.finish = script_hash.finish;
+      queue._scripts.finish.hash = script_hash.finish;
 
       // Act
       queue.finish(receive_queue, finish_queue, message_id, status, callback);
@@ -335,7 +335,7 @@ describe('Queue', function() {
       var callback = function() {};
 
       spy.yields();
-      queue._scripts.finish = script_hash.finish;
+      queue._scripts.finish.hash = script_hash.finish;
 
       // Act
       queue.finish(receive_queue, finish_queue, message_id, status, callback);
