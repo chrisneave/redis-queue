@@ -286,14 +286,26 @@ describe('Queue', function() {
   });
 
   describe('#finish', function() {
-    it('issues the TIME command once');
+    var receive_queue = 'queue:receive',
+        finish_queue = 'queue:finished_ok',
+        message_id = 'message_id:123',
+        status = 'finished ok';
+
+    it('issues the TIME command once', function(done) {
+      // Arrange
+      spy.yields();
+
+      // Act
+      queue.finish(receive_queue, finish_queue, message_id, status, function() {
+        // Assert
+        expect(time_stub.calledOnce).to.be.ok();
+        done();
+      });
+    });
+
     it('calls evalsha once', function() {
       // Arrange
-      var receive_queue = 'queue:receive',
-          finish_queue = 'queue:finished_ok',
-          message_id = 'message_id:123',
-          status = 'finished ok',
-          callback = function() {};
+      var callback = function() {};
 
       spy.yields();
 
@@ -306,11 +318,7 @@ describe('Queue', function() {
 
     it('calls evalsha if the scripts have already been loaded', function() {
       // Arrange
-      var receive_queue = 'queue:receive',
-          finish_queue = 'queue:finished_ok',
-          message_id = 'message_id:123',
-          status = 'finished ok',
-          callback = function() {};
+      var callback = function() {};
 
       spy.yields();
       queue._scripts.finish = script_hash.finish;
@@ -324,11 +332,7 @@ describe('Queue', function() {
 
     it('does not load the scripts if they have already been loaded', function() {
       // Arrange
-      var receive_queue = 'queue:receive',
-          finish_queue = 'queue:finished_ok',
-          message_id = 'message_id:123',
-          status = 'finished ok',
-          callback = function() {};
+      var callback = function() {};
 
       spy.yields();
       queue._scripts.finish = script_hash.finish;
