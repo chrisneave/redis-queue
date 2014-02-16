@@ -127,7 +127,7 @@ describe('Queue', function() {
   describe('#submit', function() {
     it('issues the TIME command once', function(done) {
       // Arrange
-      spy.yields();
+      spy.yieldsAsync();
 
       // Act
       queue.submit(submit_queue, message_key, message_body, function() {
@@ -137,54 +137,57 @@ describe('Queue', function() {
       });
     });
 
-    it('calls evalsha once', function() {
+    it('calls evalsha once', function(done) {
       // Arrange
       var submit_queue = 'queue:submitted',
           callback = function() {};
 
-      spy.yields();
+      spy.yieldsAsync();
 
       // Act
-      queue.submit(submit_queue, message_key, message_body, callback);
-
-      // Assert
-      expect(spy.calledWithExactly(script_hash.send, 4, 'message:id', 'message:received', message_key, submit_queue, JSON.stringify(message_body), js_time, callback)).to.be.ok();
+      queue.submit(submit_queue, message_key, message_body, function() {
+        // Assert
+        expect(spy.calledWith(script_hash.send, 4, 'message:id', 'message:received', message_key, submit_queue, JSON.stringify(message_body), js_time)).to.be.ok();
+        done();
+      });
     });
 
-    it('does not load the scripts if they have already been loaded', function() {
+    it('does not load the scripts if they have already been loaded', function(done) {
       // Arrange
       var submit_queue = 'queue:submitted',
           callback = function() {};
 
-      spy.yields();
+      spy.yieldsAsync();
       queue._scripts.send.hash = script_hash.send;
 
       // Act
-      queue.submit(submit_queue, message_key, message_body, callback);
-
-      // Assert
-      expect(script_spy.called).not.to.be.ok();
+      queue.submit(submit_queue, message_key, message_body, function() {
+        // Assert
+        expect(script_spy.called).not.to.be.ok();
+        done();
+      });
     });
 
-    it('calls evalsha if the scripts have already been loaded', function() {
+    it('calls evalsha if the scripts have already been loaded', function(done) {
       // Arrange
       var submit_queue = 'queue:submitted',
           callback = function() {};
 
-      spy.yields();
+      spy.yieldsAsync();
       queue._scripts.send.hash = script_hash.send;
 
       // Act
-      queue.submit(submit_queue, message_key, message_body, callback);
-
-      // Assert
-      expect(spy.calledWithExactly(script_hash.send, 4, 'message:id', 'message:received', message_key, submit_queue, JSON.stringify(message_body), js_time, callback)).to.be.ok();
+      queue.submit(submit_queue, message_key, message_body, function() {
+        // Assert
+        expect(spy.calledWith(script_hash.send, 4, 'message:id', 'message:received', message_key, submit_queue, JSON.stringify(message_body), js_time)).to.be.ok();
+        done();
+      });
     });
 
     describe('the message is sent successfully', function() {
       it('invokes the callback with an undefined error after a successful submission', function(done) {
         // Arrange
-        spy.yields();
+        spy.yieldsAsync();
 
         // Act
         queue.submit(submit_queue, message_key, message_body, function(err, result) {
@@ -196,7 +199,7 @@ describe('Queue', function() {
 
       it('invokes the callback with the new message ID after a successful submission', function(done) {
         // Arrange
-        spy.yields(undefined, [1337]);
+        spy.yieldsAsync(undefined, [1337]);
 
         // Act
         queue.submit(submit_queue, message_key, message_body, function(err, result) {
@@ -211,7 +214,7 @@ describe('Queue', function() {
   describe('#receive', function() {
     it('issues the TIME command once', function(done) {
       // Arrange
-      spy.yields(undefined, raw_message);
+      spy.yieldsAsync(undefined, raw_message);
 
       // Act
       queue.receive(submit_queue, function() {
@@ -221,58 +224,61 @@ describe('Queue', function() {
       });
     });
 
-    it('calls evalsha once', function() {
+    it('calls evalsha once', function(done) {
       // Arrange
       var submit_queue = 'queue:submitted',
           receive_queue = 'queue:received',
           callback = function() {};
 
-      spy.yields(undefined, raw_message);
-      script_spy.withArgs('load', script_content.receive).yields(undefined, script_hash.receive);
+      spy.yieldsAsync(undefined, raw_message);
+      script_spy.withArgs('load', script_content.receive).yieldsAsync(undefined, script_hash.receive);
 
       // Act
-      queue.receive(submit_queue, receive_queue, callback);
-
-      // Assert
-      expect(spy.calledWith(script_hash.receive, 3, submit_queue, receive_queue, undefined, js_time)).to.be.ok();
+      queue.receive(submit_queue, receive_queue, function() {
+        // Assert
+        expect(spy.calledWith(script_hash.receive, 3, submit_queue, receive_queue, undefined, js_time)).to.be.ok();
+        done();
+      });
     });
 
-    it('calls evalsha if the scripts have already been loaded', function() {
+    it('calls evalsha if the scripts have already been loaded', function(done) {
       // Arrange
       var submit_queue = 'queue:submitted',
           receive_queue = 'queue:received',
           callback = function() {};
 
-      spy.yields(undefined, raw_message);
+      spy.yieldsAsync(undefined, raw_message);
       queue._scripts.receive.hash = script_hash.receive;
 
       // Act
-      queue.receive(submit_queue, receive_queue, callback);
-
-      // Assert
-      expect(spy.calledWith(script_hash.receive, 3, submit_queue, receive_queue, undefined, js_time)).to.be.ok();
+      queue.receive(submit_queue, receive_queue, function() {
+        // Assert
+        expect(spy.calledWith(script_hash.receive, 3, submit_queue, receive_queue, undefined, js_time)).to.be.ok();
+        done();
+      });
     });
 
-    it('does not load the scripts if they have already been loaded', function() {
+    it('does not load the scripts if they have already been loaded', function(done) {
       // Arrange
       var submit_queue = 'queue:submitted',
           receive_queue = 'queue:received',
           callback = function() {};
 
-      spy.yields(undefined, raw_message);
+      spy.yieldsAsync(undefined, raw_message);
       queue._scripts.receive.hash = script_hash.receive;
 
       // Act
-      queue.receive(submit_queue, receive_queue, callback);
-
-      // Assert
-      expect(script_spy.called).not.to.be.ok();
+      queue.receive(submit_queue, receive_queue, function() {
+        // Assert
+        expect(script_spy.called).not.to.be.ok();
+        done();
+      });
     });
 
-    describe('the message is received successfully', function() {
+    describe('the message is received successfully', function(done) {
       it('invokes the callback with an undefined error after a successfully receiving a message', function(done) {
         // Arrange
-        spy.yields(undefined, raw_message);
+        spy.yieldsAsync(undefined, raw_message);
 
         // Act
         queue.receive(submit_queue, receive_queue, function(err, result) {
@@ -284,7 +290,7 @@ describe('Queue', function() {
 
       it('invokes the callback with the message received from the submit queue', function(done) {
         // Arrange
-        spy.yields(undefined, raw_message);
+        spy.yieldsAsync(undefined, raw_message);
 
         // Act
         queue.receive(submit_queue, receive_queue, function(err, result) {
@@ -298,7 +304,7 @@ describe('Queue', function() {
     describe('no message is received', function() {
       it('returns an undefined message', function(done) {
         // Arrange
-        spy.yields();
+        spy.yieldsAsync();
 
         // Act
         queue.receive(submit_queue, receive_queue, function(err, result) {
@@ -318,7 +324,7 @@ describe('Queue', function() {
 
     it('issues the TIME command once', function(done) {
       // Arrange
-      spy.yields();
+      spy.yieldsAsync();
 
       // Act
       queue.finish(receive_queue, finish_queue, message_id, status, function() {
@@ -328,45 +334,44 @@ describe('Queue', function() {
       });
     });
 
-    it('calls evalsha once', function() {
+    it('calls evalsha once', function(done) {
       // Arrange
       var callback = function() {};
 
-      spy.yields();
+      spy.yieldsAsync();
 
       // Act
-      queue.finish(receive_queue, finish_queue, message_id, status, callback);
-
-      // Assert
-      expect(spy.calledWithExactly(script_hash.finish, 4, receive_queue, finish_queue, message_id, 'message:received', status, js_time, callback)).to.be.ok();
+      queue.finish(receive_queue, finish_queue, message_id, status, function() {
+        // Assert
+        expect(spy.calledWith(script_hash.finish, 4, receive_queue, finish_queue, message_id, 'message:received', status, js_time)).to.be.ok();
+        done();
+      });
     });
 
-    it('calls evalsha if the scripts have already been loaded', function() {
+    it('calls evalsha if the scripts have already been loaded', function(done) {
       // Arrange
-      var callback = function() {};
-
-      spy.yields();
+      spy.yieldsAsync();
       queue._scripts.finish.hash = script_hash.finish;
 
       // Act
-      queue.finish(receive_queue, finish_queue, message_id, status, callback);
-
-      // Assert
-      expect(spy.calledWithExactly(script_hash.finish, 4, receive_queue, finish_queue, message_id, 'message:received', status, js_time, callback)).to.be.ok();
+      queue.finish(receive_queue, finish_queue, message_id, status, function() {
+        // Assert
+        expect(spy.calledWith(script_hash.finish, 4, receive_queue, finish_queue, message_id, 'message:received', status, js_time)).to.be.ok();
+        done();
+      });
     });
 
-    it('does not load the scripts if they have already been loaded', function() {
+    it('does not load the scripts if they have already been loaded', function(done) {
       // Arrange
-      var callback = function() {};
-
-      spy.yields();
+      spy.yieldsAsync();
       queue._scripts.finish.hash = script_hash.finish;
 
       // Act
-      queue.finish(receive_queue, finish_queue, message_id, status, callback);
-
-      // Assert
-      expect(script_spy.called).not.to.be.ok();
+      queue.finish(receive_queue, finish_queue, message_id, status, function() {
+        // Assert
+        expect(script_spy.called).not.to.be.ok();
+        done();
+      });
     });
   });
 
@@ -377,7 +382,7 @@ describe('Queue', function() {
       var queue_length = 10;
       var queue_name = 'my_queue';
       var stub = sinon.stub(client, 'llen');
-      stub.withArgs(queue_name).yields(err, queue_length);
+      stub.withArgs(queue_name).yieldsAsync(err, queue_length);
 
       // Act
       queue.getQueueLength(queue_name, function(err, result) {
@@ -392,8 +397,8 @@ describe('Queue', function() {
       var err;
       var queue_name = 'my_queue';
       var stub = sinon.stub(client, 'llen');
-      stub.withArgs('my_queue2').yields(err, 10);
-      stub.withArgs('my_queue').yields(err, 0);
+      stub.withArgs('my_queue2').yieldsAsync(err, 10);
+      stub.withArgs('my_queue').yieldsAsync(err, 0);
 
       // Act
       queue.getQueueLength(queue_name, function(err, result) {
@@ -407,9 +412,9 @@ describe('Queue', function() {
       // Arrange
       var err;
       var stub = sinon.stub(client, 'llen');
-      stub.withArgs('my_queue1').yields(err, 1);
-      stub.withArgs('my_queue2').yields(err, 3);
-      stub.withArgs('my_queue3').yields(err, 5);
+      stub.withArgs('my_queue1').yieldsAsync(err, 1);
+      stub.withArgs('my_queue2').yieldsAsync(err, 3);
+      stub.withArgs('my_queue3').yieldsAsync(err, 5);
       var expected = [1, 3, 5];
 
       // Act
